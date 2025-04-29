@@ -1,0 +1,35 @@
+[package]
+name = "oci2git"
+version = "0.1.0"
+edition = "2021"
+authors = ["oci2git <oci2git@example.com>"]
+description = "A tool to convert container images to Git repositories"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+tempfile = "3.10"
+tar = "0.4"
+walkdir = "2.4"
+git2 = "0.18"
+chrono = "0.4"
+rpassword = "7.3"
+once_cell = "1.17"
+oci-spec = { version = "0.8.1", features = ["image"] }
+indicatif = "0.17"
+log = "0.4"
+env_logger = "0.10"
+
+[features]
+default = []
+test-utils = []
+
+[lib]
+name = "oci2git"
+path = "src/lib.rs"
+
+[[bin]]
+name = "oci2git"
+path = "src/main.rs"
