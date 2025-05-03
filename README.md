@@ -2,6 +2,8 @@
 
 A Rust application that converts container images (Docker, etc.) to Git repositories. Each container layer is represented as a Git commit, preserving the history and structure of the original image.
 
+![Demo of OCI2Git converting the nginx image](./assets/nginx.gif)
+
 ## Features
 
 - Analyze Docker images and extract layer information
