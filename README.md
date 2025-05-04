@@ -14,7 +14,7 @@ A Rust application that converts container images (Docker, etc.) to Git reposito
 
 ## Use Cases
 
-### Layer Diffing 
+### Layer Diffing
 When troubleshooting container issues, you can use Git's powerful diffing capabilities to identify exactly what changed between any two layers. By running `git diff` between commits, engineers can see precisely which files were added, modified, or deleted, making it much easier to understand the impact of each Dockerfile instruction and locate problematic changes.
 
 ### Origin Tracking
@@ -64,7 +64,7 @@ By using `git checkout` to move to any specific commit, you can examine the cont
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/oci2git.git
+git clone https://github.com/virviil/oci2git.git
 cd oci2git
 
 # Install locally
@@ -137,7 +137,7 @@ The application uses a trait-based approach to abstract container engines:
 
 - `ContainerEngine` trait defines methods for working with container images
 - Multiple engine implementations:
-  - `DockerEngine` - Uses Docker CLI to download and process images 
+  - `DockerEngine` - Uses Docker CLI to download and process images
   - `TarEngine` - Works with pre-downloaded OCI/Docker tarballs
   - `NerdctlEngine` - Stub for future nerdctl support
 - Modular design with separate modules for container operations, Git operations, and conversion logic
