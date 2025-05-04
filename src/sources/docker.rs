@@ -11,15 +11,6 @@ pub struct DockerSource;
 
 impl DockerSource {
     pub fn new() -> Result<Self> {
-        let output = Command::new("docker")
-            .arg("--version")
-            .output()
-            .context("Failed to execute docker command. Is Docker installed and running?")?;
-
-        if !output.status.success() {
-            return Err(anyhow!("Docker is not available"));
-        }
-
         Ok(Self)
     }
 
@@ -43,7 +34,7 @@ impl Source for DockerSource {
     fn name(&self) -> &str {
         "docker"
     }
-    
+
     fn get_image_tarball(&self, image_name: &str) -> Result<PathBuf> {
         // Create a temporary directory to save the image
         let temp_dir = tempfile::tempdir().context("Failed to create temporary directory")?;
