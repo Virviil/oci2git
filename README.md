@@ -84,18 +84,33 @@ oci2git [OPTIONS] <IMAGE>
 ```
 
 Arguments:
-  `<IMAGE>`  Image name to convert (e.g., 'ubuntu:latest')
+  `<IMAGE>`  Image name to convert (e.g., 'ubuntu:latest') or path to tarball when using the tar engine
 
 Options:
   `-o, --output <OUTPUT>`  Output directory for Git repository [default: ./container_repo]
-  `-e, --engine <ENGINE>`  Container engine to use (docker, nerdctl) [default: docker]
+  `-e, --engine <ENGINE>`  Container engine to use (docker, nerdctl, tar) [default: docker]
   `-h, --help`            Print help information
   `-V, --version`         Print version information
 
-## Example
+## Examples
 
+Using Docker engine (default):
 ```bash
 oci2git -o ./ubuntu-repo ubuntu:latest
+```
+
+Using an already downloaded image tarball:
+```bash
+oci2git -e tar -o ./ubuntu-repo /path/to/ubuntu-latest.tar
+```
+
+The tar engine expects a valid OCI format tarball, which is typically created with `docker save`:
+```bash
+# Create a tarball from a local Docker image
+docker save -o ubuntu-latest.tar ubuntu:latest
+
+# Convert the tarball to a Git repository
+oci2git -e tar -o ./ubuntu-repo ubuntu-latest.tar
 ```
 
 This will create a Git repository in `./ubuntu-repo` containing:
@@ -121,7 +136,10 @@ repository/
 The application uses a trait-based approach to abstract container engines:
 
 - `ContainerEngine` trait defines methods for working with container images
-- Implementation for Docker with a stub for future nerdctl support
+- Multiple engine implementations:
+  - `DockerEngine` - Uses Docker CLI to download and process images 
+  - `TarEngine` - Works with pre-downloaded OCI/Docker tarballs
+  - `NerdctlEngine` - Stub for future nerdctl support
 - Modular design with separate modules for container operations, Git operations, and conversion logic
 
 ## Requirements

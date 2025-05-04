@@ -4,18 +4,19 @@ use env_logger::Env;
 use log::{debug, info, LevelFilter};
 use std::path::PathBuf;
 
-use oci2git::{DockerEngine, ImageToGitConverter, NerdctlEngine};
+use oci2git::{DockerSource, ImageProcessor, NerdctlSource, TarSource};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 enum Engine {
     Docker,
     Nerdctl,
+    Tar,
 }
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
-    #[arg(help = "Image name to convert (e.g., ubuntu:latest)")]
+    #[arg(help = "Image name to convert (e.g., ubuntu:latest) or path to tarball when using tar engine")]
     image: String,
 
     #[arg(
@@ -31,7 +32,7 @@ struct Cli {
         long,
         value_enum,
         default_value = "docker",
-        help = "Container engine to use"
+        help = "Container engine to use (docker, nerdctl, tar)"
     )]
     engine: Engine,
 
@@ -62,25 +63,40 @@ fn main() -> Result<()> {
     // Determine if we should use beautiful progress indicators
     let use_beautiful_progress = cli.verbose == 0;
 
-    info!("Starting oci2git with image: {}", cli.image);
     debug!("Output directory: {}", cli.output.display());
     debug!("Engine: {:?}", cli.engine);
     debug!("Beautiful progress: {}", use_beautiful_progress);
 
     match cli.engine {
         Engine::Docker => {
-            debug!("Initializing Docker engine");
-            let engine = DockerEngine::new()
-                .map_err(|e| anyhow!("Failed to initialize Docker engine: {}", e))?;
-            let converter = ImageToGitConverter::new(engine);
-            converter.convert(&cli.image, &cli.output, use_beautiful_progress)?;
+            info!("Starting oci2git with Docker engine, image: {}", cli.image);
+            debug!("Initializing Docker source");
+            
+            let source = DockerSource::new()
+                .map_err(|e| anyhow!("Failed to initialize Docker source: {}", e))?;
+                
+            let processor = ImageProcessor::new(source);
+            processor.convert(&cli.image, &cli.output, use_beautiful_progress)?;
         }
         Engine::Nerdctl => {
-            debug!("Initializing nerdctl engine");
-            let engine = NerdctlEngine::new()
-                .map_err(|e| anyhow!("Failed to initialize nerdctl engine: {}", e))?;
-            let converter = ImageToGitConverter::new(engine);
-            converter.convert(&cli.image, &cli.output, use_beautiful_progress)?;
+            info!("Starting oci2git with nerdctl engine, image: {}", cli.image);
+            debug!("Initializing nerdctl source");
+            
+            let source = NerdctlSource::new()
+                .map_err(|e| anyhow!("Failed to initialize nerdctl source: {}", e))?;
+                
+            let processor = ImageProcessor::new(source);
+            processor.convert(&cli.image, &cli.output, use_beautiful_progress)?;
+        }
+        Engine::Tar => {
+            info!("Starting oci2git with tar engine, tarball: {}", cli.image);
+            debug!("Initializing tar source");
+            
+            let source = TarSource::new()
+                .map_err(|e| anyhow!("Failed to initialize tar source: {}", e))?;
+                
+            let processor = ImageProcessor::new(source);
+            processor.convert(&cli.image, &cli.output, use_beautiful_progress)?;
         }
     }
 
