@@ -16,6 +16,7 @@ A Rust application that converts container images (Docker, etc.) to Git reposito
 
 ### Layer Diffing
 When troubleshooting container issues, you can use Git's powerful diffing capabilities to identify exactly what changed between any two layers. By running `git diff` between commits, engineers can see precisely which files were added, modified, or deleted, making it much easier to understand the impact of each Dockerfile instruction and locate problematic changes.
+![Example for layer diff](./assets/layer-diff.png)
 
 ### Origin Tracking
 Using `git blame`, developers can quickly determine which layer introduced a specific file or line of code. This is particularly valuable when diagnosing issues with configuration files or dependencies. Instead of manually inspecting each layer, you can immediately trace the origin of any file back to its source layer and corresponding Dockerfile instruction.
@@ -49,6 +50,7 @@ Sometimes the most insightful comparisons come from examining changes across mul
 
 ### Layer Exploration
 By using `git checkout` to move to any specific commit, you can examine the container filesystem exactly as it existed at that layer. This allows developers to inspect the precise state of files and directories at any point in the image's creation process, providing invaluable context when debugging or examining container behavior.
+![Checkout to previous commit](./assets/checkout.png)
 
 ### Additional Use Cases
 
