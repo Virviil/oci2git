@@ -133,16 +133,6 @@ repository/
 └── rootfs/      # Filesystem content from the container
 ```
 
-## Architecture
-
-The application uses a trait-based approach to abstract container engines:
-
-- `ContainerEngine` trait defines methods for working with container images
-- Multiple engine implementations:
-  - `DockerEngine` - Uses Docker CLI to download and process images
-  - `TarEngine` - Works with pre-downloaded OCI/Docker tarballs
-  - `NerdctlEngine` - Stub for future nerdctl support
-- Modular design with separate modules for container operations, Git operations, and conversion logic
 
 ## Requirements
 
