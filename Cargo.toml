@@ -39,3 +39,7 @@ path = "src/lib.rs"
 [[bin]]
 name = "oci2git"
 path = "src/main.rs"
+
+[profile.release]
+codegen-units = 1
+lto = true
