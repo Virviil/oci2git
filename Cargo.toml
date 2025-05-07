@@ -22,7 +22,6 @@ tar = "0.4"
 walkdir = "2.4"
 git2 = "0.20"
 chrono = "0.4"
-once_cell = "1.17"
 oci-spec = { version = "0.8.1", features = ["image"] }
 indicatif = "0.17"
 log = "0.4"

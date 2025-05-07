@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use log::info;
 use std::path::PathBuf;
+use tempfile::TempDir;
 
 use super::Source;
 
@@ -18,7 +19,7 @@ impl Source for TarSource {
         "tar"
     }
     
-    fn get_image_tarball(&self, image_path: &str) -> Result<PathBuf> {
+    fn get_image_tarball(&self, image_path: &str) -> Result<(PathBuf, Option<TempDir>)> {
         // For tar source, image_path is the path to the existing tarball
         let tarball_path = PathBuf::from(image_path);
         
@@ -45,7 +46,7 @@ impl Source for TarSource {
             info!("Warning: File does not have .tar extension. Proceeding anyway, but this might not be a valid image tarball.");
         }
 
-        // Just return the existing path - no need to copy it
-        Ok(tarball_path)
+        // Just return the existing path - no temp dir needed for tar source
+        Ok((tarball_path, None))
     }
 }

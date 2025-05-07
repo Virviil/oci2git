@@ -37,6 +37,10 @@ impl<S: Source> ImageProcessor<S> {
         debug!("Output directory: {}", output_dir.display());
         debug!("Beautiful progress: {}", beautiful_progress);
 
+        // Store all temporary directories we need to keep alive during processing
+        // They will be automatically cleaned up when they go out of scope at the end of this function
+        let mut temp_dirs: Vec<tempfile::TempDir> = Vec::new();
+
         // Setup progress reporting - just one spinner for the active task and one progress bar when needed
         let multi_progress = MultiProgress::new();
         let spinner_style = ProgressStyle::default_spinner()
@@ -66,7 +70,12 @@ impl<S: Source> ImageProcessor<S> {
             info!("Getting image tarball using {} source...", self.source.name());
         }
 
-        let tarball_path = self.source.get_image_tarball(image_name)?;
+        let (tarball_path, tarball_temp_dir) = self.source.get_image_tarball(image_name)?;
+        
+        // Store the tarball temp dir if it exists
+        if let Some(temp_dir) = tarball_temp_dir {
+            temp_dirs.push(temp_dir);
+        }
         
         // Extract the tarball
         if let Some(pb) = &spinner {
@@ -75,7 +84,8 @@ impl<S: Source> ImageProcessor<S> {
             info!("Extracting image tarball...");
         }
         
-        let extract_dir = self.extract_tarball(&tarball_path)?;
+        let (extract_dir, extract_temp_dir) = self.extract_tarball(&tarball_path)?;
+        temp_dirs.push(extract_temp_dir);
         
         // Get the layers in chronological order (oldest to newest)
         if let Some(pb) = &spinner {
@@ -207,7 +217,11 @@ impl<S: Source> ImageProcessor<S> {
             info!("Preparing layer extraction...");
         }
 
+        // Create a temporary directory for layer extraction and keep a reference to its path
         let temp_layer_dir = tempfile::tempdir()?;
+        let temp_layer_path = temp_layer_dir.path().to_path_buf();
+        // Store the temp_dir to keep it alive until the end of the function
+        temp_dirs.push(temp_layer_dir);
 
         // Important: Docker history and layer tarballs might be in different orders!
         // Docker history shows newest to oldest (but we reversed it already to oldest first)
@@ -328,7 +342,7 @@ impl<S: Source> ImageProcessor<S> {
             }
 
             debug!("Extracting tarball: {:?}", layer_tarball);
-            fs::create_dir_all(temp_layer_dir.path())?;
+            fs::create_dir_all(&temp_layer_path)?;
 
             // Extract the layer tarball to the temp directory
             let extract_status = Command::new("tar")
@@ -336,7 +350,7 @@ impl<S: Source> ImageProcessor<S> {
                     "-xf",
                     layer_tarball.to_str().unwrap(),
                     "-C",
-                    temp_layer_dir.path().to_str().unwrap(),
+                    temp_layer_path.to_str().unwrap(),
                 ])
                 .status()
                 .context(format!(
@@ -352,7 +366,7 @@ impl<S: Source> ImageProcessor<S> {
             }
 
             // Recursively copy all files from the temp layer directory to rootfs
-            let entry_count = walkdir::WalkDir::new(temp_layer_dir.path())
+            let entry_count = walkdir::WalkDir::new(&temp_layer_path)
                 .follow_links(false)
                 .into_iter()
                 .count();
@@ -384,7 +398,7 @@ impl<S: Source> ImageProcessor<S> {
             };
 
             let mut processed_files = 0;
-            for entry in walkdir::WalkDir::new(temp_layer_dir.path()).follow_links(false) {
+            for entry in walkdir::WalkDir::new(&temp_layer_path).follow_links(false) {
                 let entry = entry.context("Failed to read directory entry")?;
                 let source_path = entry.path();
 
@@ -396,12 +410,12 @@ impl<S: Source> ImageProcessor<S> {
                 }
 
                 // Skip the temp directory itself
-                if source_path == temp_layer_dir.path() {
+                if source_path == temp_layer_path {
                     continue;
                 }
 
                 let relative_path = source_path
-                    .strip_prefix(temp_layer_dir.path())
+                    .strip_prefix(&temp_layer_path)
                     .context("Failed to get relative path")?;
 
                 // Handle whiteout files (.wh. files in overlay fs)
@@ -533,8 +547,8 @@ impl<S: Source> ImageProcessor<S> {
             }
 
             // Clear the temp directory for the next layer
-            fs::remove_dir_all(temp_layer_dir.path()).ok();
-            fs::create_dir_all(temp_layer_dir.path())?;
+            fs::remove_dir_all(&temp_layer_path).ok();
+            fs::create_dir_all(&temp_layer_path)?;
 
             // Commit the changes for this layer
             if let Some(pb) = &spinner {
@@ -571,7 +585,8 @@ impl<S: Source> ImageProcessor<S> {
     }
 
     // Extracts the image tarball to a temporary directory
-    fn extract_tarball(&self, tarball_path: &Path) -> Result<PathBuf> {
+    // Returns the extract_dir path and the temp_dir that must be kept alive
+    fn extract_tarball(&self, tarball_path: &Path) -> Result<(PathBuf, tempfile::TempDir)> {
         // Create a temporary directory for extraction
         let temp_dir = tempfile::tempdir().context("Failed to create temporary directory")?;
         let extract_dir = temp_dir.path().join("extracted");
@@ -600,14 +615,8 @@ impl<S: Source> ImageProcessor<S> {
             ));
         }
 
-        // Store the temp_dir in a static variable to prevent it from being dropped
-        static EXTRACT_DIRS: once_cell::sync::Lazy<std::sync::Mutex<Vec<tempfile::TempDir>>> =
-            once_cell::sync::Lazy::new(|| std::sync::Mutex::new(Vec::new()));
-
-        // Add our tempdir to the list of preserved directories
-        EXTRACT_DIRS.lock().unwrap().push(temp_dir);
-
-        Ok(extract_dir)
+        // Return both the extract directory path and the temp directory that must be kept alive
+        Ok((extract_dir, temp_dir))
     }
 
     // Get layers from the extracted image

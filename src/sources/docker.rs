@@ -2,7 +2,7 @@ use anyhow::{anyhow, Context, Result};
 use log::info;
 use std::path::PathBuf;
 use std::process::Command;
-use tempfile;
+use tempfile::TempDir;
 
 use super::Source;
 
@@ -35,23 +35,16 @@ impl Source for DockerSource {
         "docker"
     }
 
-    fn get_image_tarball(&self, image_name: &str) -> Result<PathBuf> {
+    fn get_image_tarball(&self, image_name: &str) -> Result<(PathBuf, Option<TempDir>)> {
         // Create a temporary directory to save the image
-        let temp_dir = tempfile::tempdir().context("Failed to create temporary directory")?;
+        let temp_dir = TempDir::new().context("Failed to create temporary directory")?;
         let tarball_path = temp_dir.path().join("image.tar");
 
         // Use docker save to export the full image with all layers
         info!("Exporting Docker image '{}' to tarball...", image_name);
         self.run_command(&["save", "-o", tarball_path.to_str().unwrap(), image_name])?;
 
-        // Store the temp_dir in a static variable to prevent it from being dropped
-        // This ensures the temporary directory stays around until the program exits
-        static TEMP_DIRS: once_cell::sync::Lazy<std::sync::Mutex<Vec<tempfile::TempDir>>> =
-            once_cell::sync::Lazy::new(|| std::sync::Mutex::new(Vec::new()));
-
-        // Add our tempdir to the list of preserved directories
-        TEMP_DIRS.lock().unwrap().push(temp_dir);
-
-        Ok(tarball_path)
+        // Return both the tarball path and the tempdir to ensure it stays alive
+        Ok((tarball_path, Some(temp_dir)))
     }
 }

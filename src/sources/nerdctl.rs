@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use std::path::PathBuf;
 use std::process::Command;
+use tempfile::TempDir;
 
 use super::Source;
 
@@ -26,7 +27,7 @@ impl Source for NerdctlSource {
         "nerdctl"
     }
     
-    fn get_image_tarball(&self, _image_name: &str) -> Result<PathBuf> {
+    fn get_image_tarball(&self, _image_name: &str) -> Result<(PathBuf, Option<TempDir>)> {
         // This will be implemented in the future
         unimplemented!("nerdctl support is not yet implemented")
     }
