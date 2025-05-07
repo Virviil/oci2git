@@ -89,10 +89,13 @@ Arguments:
   `<IMAGE>`  Image name to convert (e.g., 'ubuntu:latest') or path to tarball when using the tar engine
 
 Options:
-  `-o, --output <OUTPUT>`  Output directory for Git repository [default: ./container_repo]
+  `-o, --output <o>`  Output directory for Git repository [default: ./container_repo]
   `-e, --engine <ENGINE>`  Container engine to use (docker, nerdctl, tar) [default: docker]
   `-h, --help`            Print help information
   `-V, --version`         Print version information
+
+Environment Variables:
+  `TMPDIR`  Set this environment variable to change the default location used for intermediate data processing. This is platform-dependent (e.g., `TMPDIR` on Unix/macOS, `TEMP` or `TMP` on Windows).
 
 ## Examples
 
