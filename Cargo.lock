@@ -773,7 +773,6 @@ dependencies = [
  "indicatif",
  "log",
  "oci-spec",
- "once_cell",
  "serde",
  "serde_json",
  "tar",
