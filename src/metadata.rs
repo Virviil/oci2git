@@ -225,7 +225,7 @@ fn format_image_metadata_markdown(metadata: &ImageMetadata) -> Result<String> {
             // For other instructions, keep the entire command
             created_by.clone()
         };
-        
+
         // Escape pipe characters to prevent breaking markdown tables
         formatted_command = formatted_command.replace("|", "\\|");
 
@@ -363,7 +363,7 @@ mod tests {
         // Check that the long command is preserved completely (not truncated)
         assert!(result.contains(long_command));
     }
-    
+
     #[test]
     fn test_pipe_character_escaping() {
         let mut metadata = create_test_metadata();

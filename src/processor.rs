@@ -33,7 +33,11 @@ impl<S: Source> ImageProcessor<S> {
         output_dir: &Path,
         beautiful_progress: bool,
     ) -> Result<()> {
-        info!("Starting conversion of image with {} source: {}", self.source.name(), image_name);
+        info!(
+            "Starting conversion of image with {} source: {}",
+            self.source.name(),
+            image_name
+        );
         debug!("Output directory: {}", output_dir.display());
         debug!("Beautiful progress: {}", beautiful_progress);
 
@@ -65,28 +69,34 @@ impl<S: Source> ImageProcessor<S> {
 
         // Get the image tarball from the source
         if let Some(pb) = &spinner {
-            pb.set_message(format!("Getting image tarball using {} source...", self.source.name()));
+            pb.set_message(format!(
+                "Getting image tarball using {} source...",
+                self.source.name()
+            ));
         } else {
-            info!("Getting image tarball using {} source...", self.source.name());
+            info!(
+                "Getting image tarball using {} source...",
+                self.source.name()
+            );
         }
 
         let (tarball_path, tarball_temp_dir) = self.source.get_image_tarball(image_name)?;
-        
+
         // Store the tarball temp dir if it exists
         if let Some(temp_dir) = tarball_temp_dir {
             temp_dirs.push(temp_dir);
         }
-        
+
         // Extract the tarball
         if let Some(pb) = &spinner {
             pb.set_message("Extracting image tarball...");
         } else {
             info!("Extracting image tarball...");
         }
-        
+
         let (extract_dir, extract_temp_dir) = self.extract_tarball(&tarball_path)?;
         temp_dirs.push(extract_temp_dir);
-        
+
         // Get the layers in chronological order (oldest to newest)
         if let Some(pb) = &spinner {
             pb.set_message("Analyzing image layers...");
@@ -680,10 +690,16 @@ impl<S: Source> ImageProcessor<S> {
             // This preserves special syntax like |9 in commands
             let command = if created_by.contains("/bin/sh -c #(nop) ") {
                 // For non-execution instructions, remove the shell prefix and trim any leading whitespace
-                created_by.replace("/bin/sh -c #(nop) ", "").trim_start().to_string()
+                created_by
+                    .replace("/bin/sh -c #(nop) ", "")
+                    .trim_start()
+                    .to_string()
             } else if created_by.contains("/bin/sh -c ") {
                 // For execution instructions, remove the shell prefix and trim any leading whitespace
-                created_by.replace("/bin/sh -c ", "").trim_start().to_string()
+                created_by
+                    .replace("/bin/sh -c ", "")
+                    .trim_start()
+                    .to_string()
             } else {
                 // For other instructions, keep the entire command
                 created_by.to_string()

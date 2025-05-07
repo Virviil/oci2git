@@ -18,11 +18,11 @@ impl Source for TarSource {
     fn name(&self) -> &str {
         "tar"
     }
-    
+
     fn get_image_tarball(&self, image_path: &str) -> Result<(PathBuf, Option<TempDir>)> {
         // For tar source, image_path is the path to the existing tarball
         let tarball_path = PathBuf::from(image_path);
-        
+
         // Verify the tarball exists
         if !tarball_path.exists() {
             return Err(anyhow!(
@@ -41,7 +41,7 @@ impl Source for TarSource {
             .extension()
             .and_then(|ext| ext.to_str())
             .unwrap_or("");
-        
+
         if extension != "tar" {
             info!("Warning: File does not have .tar extension. Proceeding anyway, but this might not be a valid image tarball.");
         }

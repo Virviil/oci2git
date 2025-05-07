@@ -16,7 +16,9 @@ enum Engine {
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
-    #[arg(help = "Image name to convert (e.g., ubuntu:latest) or path to tarball when using tar engine")]
+    #[arg(
+        help = "Image name to convert (e.g., ubuntu:latest) or path to tarball when using tar engine"
+    )]
     image: String,
 
     #[arg(
@@ -71,30 +73,30 @@ fn main() -> Result<()> {
         Engine::Docker => {
             info!("Starting oci2git with Docker engine, image: {}", cli.image);
             debug!("Initializing Docker source");
-            
+
             let source = DockerSource::new()
                 .map_err(|e| anyhow!("Failed to initialize Docker source: {}", e))?;
-                
+
             let processor = ImageProcessor::new(source);
             processor.convert(&cli.image, &cli.output, use_beautiful_progress)?;
         }
         Engine::Nerdctl => {
             info!("Starting oci2git with nerdctl engine, image: {}", cli.image);
             debug!("Initializing nerdctl source");
-            
+
             let source = NerdctlSource::new()
                 .map_err(|e| anyhow!("Failed to initialize nerdctl source: {}", e))?;
-                
+
             let processor = ImageProcessor::new(source);
             processor.convert(&cli.image, &cli.output, use_beautiful_progress)?;
         }
         Engine::Tar => {
             info!("Starting oci2git with tar engine, tarball: {}", cli.image);
             debug!("Initializing tar source");
-            
-            let source = TarSource::new()
-                .map_err(|e| anyhow!("Failed to initialize tar source: {}", e))?;
-                
+
+            let source =
+                TarSource::new().map_err(|e| anyhow!("Failed to initialize tar source: {}", e))?;
+
             let processor = ImageProcessor::new(source);
             processor.convert(&cli.image, &cli.output, use_beautiful_progress)?;
         }

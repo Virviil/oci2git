@@ -26,7 +26,7 @@ impl Source for NerdctlSource {
     fn name(&self) -> &str {
         "nerdctl"
     }
-    
+
     fn get_image_tarball(&self, _image_name: &str) -> Result<(PathBuf, Option<TempDir>)> {
         // This will be implemented in the future
         unimplemented!("nerdctl support is not yet implemented")
