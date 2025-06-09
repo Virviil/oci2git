@@ -1,0 +1,17 @@
+{
+  "app": {
+    "name": "test-app",
+    "version": "1.0.0",
+    "environment": "development"
+  },
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "name": "testdb"
+  },
+  "features": {
+    "logging": true,
+    "metrics": false,
+    "debug": true
+  }
+}

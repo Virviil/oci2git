@@ -1,0 +1,3 @@
+Hello from oci2git test container!
+This is a test file to verify file extraction.
+Created for testing Docker image to git conversion.
