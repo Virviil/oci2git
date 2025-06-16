@@ -123,7 +123,10 @@ impl<S: Source> ImageProcessor<S> {
         }
 
         // Create branch name using polymorphic method from source
-        debug!("Creating branch name for image '{}' with digest: '{}'", image_name, metadata.id);
+        debug!(
+            "Creating branch name for image '{}' with digest: '{}'",
+            image_name, metadata.id
+        );
         let branch_name = self.source.branch_name(image_name, &metadata.id);
         debug!("Generated branch name: '{}'", branch_name);
 
@@ -790,9 +793,15 @@ impl<S: Source> ImageProcessor<S> {
             debug!("Extracted image digest from blob path: '{}'", metadata.id);
         } else if let Some(digest_hash) = config_file.strip_suffix(".json") {
             metadata.id = format!("sha256:{}", digest_hash);
-            debug!("Extracted image digest from config filename: '{}'", metadata.id);
+            debug!(
+                "Extracted image digest from config filename: '{}'",
+                metadata.id
+            );
         } else {
-            debug!("Could not extract digest from config path '{}', using metadata default", config_file);
+            debug!(
+                "Could not extract digest from config path '{}', using metadata default",
+                config_file
+            );
         }
 
         // Add repo tags from the manifest (these are not in the config)
