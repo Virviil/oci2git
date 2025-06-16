@@ -12,6 +12,10 @@ const EMAIL: &str = "oci2git@example.com";
 
 impl GitRepo {
     pub fn init(path: &Path) -> Result<Self> {
+        Self::init_with_branch(path, None)
+    }
+
+    pub fn init_with_branch(path: &Path, branch_name: Option<&str>) -> Result<Self> {
         let repo = Repository::init(path).context("Failed to initialize Git repository")?;
 
         let mut config = repo.config().context("Failed to get git config")?;
@@ -22,10 +26,42 @@ impl GitRepo {
             .set_str("user.email", EMAIL)
             .context("Failed to set git email")?;
 
-        Ok(Self {
+        let git_repo = Self {
             repo,
             repo_path: path.to_path_buf(),
-        })
+        };
+
+        // Create the custom branch if specified
+        if let Some(branch) = branch_name {
+            git_repo.create_branch(branch)?;
+        }
+
+        Ok(git_repo)
+    }
+
+    pub fn create_branch(&self, branch_name: &str) -> Result<()> {
+        let signature =
+            Signature::now(USERNAME, EMAIL).context("Failed to create git signature")?;
+
+        // Create an empty initial commit to establish the branch
+        let tree_id = self.repo.index()?.write_tree()?;
+        let tree = self.repo.find_tree(tree_id)?;
+
+        let _commit_id = self.repo.commit(
+            Some(&format!("refs/heads/{}", branch_name)),
+            &signature,
+            &signature,
+            "Initial commit",
+            &tree,
+            &[],
+        )?;
+
+        // Set HEAD to point to the new branch
+        self.repo
+            .set_head(&format!("refs/heads/{}", branch_name))
+            .context("Failed to set HEAD to new branch")?;
+
+        Ok(())
     }
 
     pub fn create_empty_commit(&self, message: &str) -> Result<()> {
@@ -299,5 +335,32 @@ mod tests {
             "Expected at least 2 commits, got {}",
             commit_count
         );
+    }
+
+    #[test]
+    fn test_init_with_custom_branch() {
+        let temp_dir = tempdir().unwrap();
+        let branch_name = "hello-world#latest#1234567890ab";
+        let repo = GitRepo::init_with_branch(temp_dir.path(), Some(branch_name)).unwrap();
+
+        // Verify the repository was created
+        assert!(temp_dir.path().join(".git").exists());
+
+        // Verify git config was set correctly
+        let config = repo.repo.config().unwrap();
+        assert_eq!(config.get_string("user.name").unwrap(), "oci2git");
+        assert_eq!(
+            config.get_string("user.email").unwrap(),
+            "oci2git@example.com"
+        );
+
+        // Verify we're on the correct branch
+        let head = repo.repo.head().unwrap();
+        let branch_ref = head.shorthand().unwrap();
+        assert_eq!(branch_ref, branch_name);
+
+        // Verify there's an initial commit
+        assert_eq!(repo.get_commit_count().unwrap(), 1);
+        assert_eq!(repo.get_last_commit_message().unwrap(), "Initial commit");
     }
 }

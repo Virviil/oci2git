@@ -31,4 +31,59 @@ impl Source for NerdctlSource {
         // This will be implemented in the future
         unimplemented!("nerdctl support is not yet implemented")
     }
+
+    fn branch_name(&self, image_name: &str, image_digest: &str) -> String {
+        // nerdctl uses docker-like naming
+        // If no tag is specified, add "latest" as the default tag
+        let normalized = if !image_name.contains(':') && !image_name.contains('@') {
+            format!("{}:latest", image_name)
+        } else {
+            image_name.to_string()
+        };
+
+        let base_branch = normalized
+            .replace(":", "#")
+            .replace("/", "-")
+            .replace("@", "-");
+
+        if let Some(short_digest) = super::extract_short_digest(image_digest) {
+            format!("{}#{}", base_branch, short_digest)
+        } else {
+            // Fallback: use image_digest as-is if it doesn't have sha256: prefix
+            format!("{}#{}", base_branch, image_digest)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_nerdctl_source_branch_name() {
+        // Create a source directly without checking if nerdctl is available
+        let source = NerdctlSource;
+        // The processor always provides the digest extracted from image metadata
+        assert_eq!(
+            source.branch_name("hello-world:latest", "sha256:1234567890abcdef"),
+            "hello-world#latest#1234567890ab"
+        );
+        assert_eq!(
+            source.branch_name("hello-world", "sha256:1234567890abcdef"),
+            "hello-world#latest#1234567890ab"
+        );
+        assert_eq!(
+            source.branch_name("nginx/nginx:1.21", "sha256:9876543210fedcba"),
+            "nginx-nginx#1.21#9876543210fe"
+        );
+        assert_eq!(
+            source.branch_name("nginx", "sha256:abcdef123456789"),
+            "nginx#latest#abcdef123456"
+        );
+        // Test fallback for digest without sha256: prefix
+        assert_eq!(
+            source.branch_name("nginx", "abcdef123456789"),
+            "nginx#latest#abcdef123456789"
+        );
+    }
 }
