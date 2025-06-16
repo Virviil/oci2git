@@ -7,8 +7,8 @@
 use anyhow::Result;
 use oci2git::processor::ImageProcessor;
 use oci2git::sources::Source;
-use std::path::Path;
 use std::fs;
+use std::path::Path;
 use tempfile::TempDir;
 
 /// Test helper: Process any tar file and verify basic structure
@@ -39,10 +39,14 @@ pub fn verify_extracted_files(output_dir: &Path, expected_files: &[(&str, &str)]
     for (file_path, expected_content) in expected_files {
         let full_path = output_dir.join("rootfs").join(file_path);
         assert!(full_path.exists(), "File {} should exist", file_path);
-        
+
         let content = fs::read_to_string(&full_path)?;
-        assert!(content.contains(expected_content), 
-                "File {} should contain '{}'", file_path, expected_content);
+        assert!(
+            content.contains(expected_content),
+            "File {} should contain '{}'",
+            file_path,
+            expected_content
+        );
     }
     Ok(())
 }
@@ -51,10 +55,13 @@ pub fn verify_extracted_files(output_dir: &Path, expected_files: &[(&str, &str)]
 pub fn verify_environment_variables(output_dir: &Path, expected_vars: &[&str]) -> Result<()> {
     let image_md = output_dir.join("Image.md");
     let metadata_content = fs::read_to_string(&image_md)?;
-    
+
     for env_var in expected_vars {
-        assert!(metadata_content.contains(env_var), 
-                "Metadata should contain environment variable: {}", env_var);
+        assert!(
+            metadata_content.contains(env_var),
+            "Metadata should contain environment variable: {}",
+            env_var
+        );
     }
     Ok(())
 }
@@ -63,9 +70,12 @@ pub fn verify_environment_variables(output_dir: &Path, expected_vars: &[&str]) -
 pub fn verify_entrypoint(output_dir: &Path, expected_entrypoint: &str) -> Result<()> {
     let image_md = output_dir.join("Image.md");
     let metadata_content = fs::read_to_string(&image_md)?;
-    
-    assert!(metadata_content.contains(expected_entrypoint), 
-            "Metadata should contain entrypoint: {}", expected_entrypoint);
+
+    assert!(
+        metadata_content.contains(expected_entrypoint),
+        "Metadata should contain entrypoint: {}",
+        expected_entrypoint
+    );
     Ok(())
 }
 
@@ -73,10 +83,10 @@ pub fn verify_entrypoint(output_dir: &Path, expected_entrypoint: &str) -> Result
 pub fn verify_git_structure(output_dir: &Path) -> Result<()> {
     let git_dir = output_dir.join(".git");
     assert!(git_dir.exists(), "Git directory should exist");
-    
+
     let git_config = git_dir.join("config");
     assert!(git_config.exists(), "Git config should exist");
-    
+
     let git_head = git_dir.join("HEAD");
     assert!(git_head.exists(), "Git HEAD should exist");
 
@@ -98,7 +108,10 @@ mod tests {
     fn test_universal_tar_processing() -> Result<()> {
         // Skip if fixture tar doesn't exist
         if !Path::new(FIXTURE_TAR_PATH).exists() {
-            println!("Skipping test: fixture tar file not found at {}", FIXTURE_TAR_PATH);
+            println!(
+                "Skipping test: fixture tar file not found at {}",
+                FIXTURE_TAR_PATH
+            );
             return Ok(());
         }
 
@@ -111,7 +124,10 @@ mod tests {
     fn test_universal_file_extraction() -> Result<()> {
         // Skip if fixture tar doesn't exist
         if !Path::new(FIXTURE_TAR_PATH).exists() {
-            println!("Skipping test: fixture tar file not found at {}", FIXTURE_TAR_PATH);
+            println!(
+                "Skipping test: fixture tar file not found at {}",
+                FIXTURE_TAR_PATH
+            );
             return Ok(());
         }
 
@@ -137,7 +153,10 @@ mod tests {
     fn test_universal_metadata_extraction() -> Result<()> {
         // Skip if fixture tar doesn't exist
         if !Path::new(FIXTURE_TAR_PATH).exists() {
-            println!("Skipping test: fixture tar file not found at {}", FIXTURE_TAR_PATH);
+            println!(
+                "Skipping test: fixture tar file not found at {}",
+                FIXTURE_TAR_PATH
+            );
             return Ok(());
         }
 
@@ -162,7 +181,10 @@ mod tests {
     fn test_universal_git_structure() -> Result<()> {
         // Skip if fixture tar doesn't exist
         if !Path::new(FIXTURE_TAR_PATH).exists() {
-            println!("Skipping test: fixture tar file not found at {}", FIXTURE_TAR_PATH);
+            println!(
+                "Skipping test: fixture tar file not found at {}",
+                FIXTURE_TAR_PATH
+            );
             return Ok(());
         }
 

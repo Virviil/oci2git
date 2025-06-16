@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use tempfile::TempDir;
 
-use super::Source;
+use super::{naming, Source};
 
 /// Docker implementation of the Source trait
 pub struct DockerSource;
@@ -46,5 +46,41 @@ impl Source for DockerSource {
 
         // Return both the tarball path and the tempdir to ensure it stays alive
         Ok((tarball_path, Some(temp_dir)))
+    }
+
+    fn branch_name(&self, image_name: &str, image_digest: &str) -> String {
+        let base_branch = naming::container_image_to_branch(image_name);
+        naming::combine_branch_with_digest(&base_branch, image_digest)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_docker_source_branch_name() {
+        let source = DockerSource::new().unwrap();
+        assert_eq!(
+            source.branch_name("hello-world:latest", "sha256:1234567890abcdef"),
+            "hello-world#latest#1234567890ab"
+        );
+        assert_eq!(
+            source.branch_name("hello-world", "sha256:1234567890abcdef"),
+            "hello-world#latest#1234567890ab"
+        );
+        assert_eq!(
+            source.branch_name("nginx/nginx:1.21", "sha256:9876543210fedcba"),
+            "nginx-nginx#1.21#9876543210fe"
+        );
+        assert_eq!(
+            source.branch_name("nginx", "sha256:abcdef123456789"),
+            "nginx#latest#abcdef123456"
+        );
+        // Test fallback for digest without sha256: prefix
+        assert_eq!(
+            source.branch_name("nginx", "abcdef123456789"),
+            "nginx#latest#abcdef123456789"
+        );
     }
 }

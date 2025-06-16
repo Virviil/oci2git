@@ -122,7 +122,15 @@ impl<S: Source> ImageProcessor<S> {
             info!("Initializing Git repository...");
         }
 
-        let repo = GitRepo::init(output_dir)?;
+        // Create branch name using polymorphic method from source
+        debug!(
+            "Creating branch name for image '{}' with digest: '{}'",
+            image_name, metadata.id
+        );
+        let branch_name = self.source.branch_name(image_name, &metadata.id);
+        debug!("Generated branch name: '{}'", branch_name);
+
+        let repo = GitRepo::init_with_branch(output_dir, Some(&branch_name))?;
 
         // First commit: Add Image.md with metadata
         if let Some(pb) = &spinner {
@@ -765,6 +773,7 @@ impl<S: Source> ImageProcessor<S> {
         let config_file = manifest[0]["Config"]
             .as_str()
             .ok_or_else(|| anyhow!("Invalid manifest format - missing Config"))?;
+        debug!("Config file path from manifest: '{}'", config_file);
 
         // Read the config file as JSON
         let config_path = extract_dir.join(config_file);
@@ -778,9 +787,21 @@ impl<S: Source> ImageProcessor<S> {
         // Convert to our metadata format
         let mut metadata = metadata::from_oci_config(&config);
 
-        // Extract ID from the image name if present or from config file
-        if let Some(id) = config_file.strip_suffix(".json") {
-            metadata.id = format!("sha256:{}", id);
+        // Extract digest from config file path (format: blobs/sha256/HASH)
+        if let Some(digest_hash) = config_file.strip_prefix("blobs/sha256/") {
+            metadata.id = format!("sha256:{}", digest_hash);
+            debug!("Extracted image digest from blob path: '{}'", metadata.id);
+        } else if let Some(digest_hash) = config_file.strip_suffix(".json") {
+            metadata.id = format!("sha256:{}", digest_hash);
+            debug!(
+                "Extracted image digest from config filename: '{}'",
+                metadata.id
+            );
+        } else {
+            debug!(
+                "Could not extract digest from config path '{}', using metadata default",
+                config_file
+            );
         }
 
         // Add repo tags from the manifest (these are not in the config)
@@ -880,11 +901,40 @@ impl<S: Source> ImageProcessor<S> {
 
 #[cfg(test)]
 pub mod tests {
+    use super::*;
+
     #[test]
     fn placeholder_test() {
         // This is a placeholder for future unit tests.
         // We've temporarily disabled tests that interact with
         // tar/external commands because they're fragile in the test environment.
         assert!(true);
+    }
+
+    #[test]
+    fn test_polymorphic_branch_naming() {
+        use crate::sources::{DockerSource, TarSource};
+
+        // Test Docker source - digest is always provided by processor
+        let docker_source = DockerSource::new().unwrap();
+        assert_eq!(
+            docker_source.branch_name("hello-world:latest", "sha256:1234567890abcdef"),
+            "hello-world#latest#1234567890ab"
+        );
+        assert_eq!(
+            docker_source.branch_name("nginx/nginx:1.21", "sha256:9876543210fedcba"),
+            "nginx-nginx#1.21#9876543210fe"
+        );
+
+        // Test Tar source - digest is always provided by processor
+        let tar_source = TarSource::new().unwrap();
+        assert_eq!(
+            tar_source.branch_name("/path/to/my-image.tar", "sha256:1234567890abcdef"),
+            "my-image#1234567890ab"
+        );
+        assert_eq!(
+            tar_source.branch_name("ubuntu 20.04.tar", "sha256:abcdef123456789"),
+            "ubuntu-20-04#abcdef123456"
+        );
     }
 }
