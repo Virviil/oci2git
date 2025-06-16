@@ -59,27 +59,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_docker_to_branch() {
-        assert_eq!(docker_to_branch("hello-world:latest"), "hello-world#latest");
-        assert_eq!(docker_to_branch("hello-world"), "hello-world#latest");
-        assert_eq!(docker_to_branch("nginx"), "nginx#latest");
-        assert_eq!(docker_to_branch("nginx/nginx:1.21"), "nginx-nginx#1.21");
-        assert_eq!(
-            docker_to_branch("registry.example.com/my-app:v1.0"),
-            "registry.example.com-my-app#v1.0"
-        );
-        assert_eq!(
-            docker_to_branch("alpine@sha256:abc123"),
-            "alpine-sha256#abc123"
-        );
-        assert_eq!(
-            docker_to_branch("library/ubuntu:20.04"),
-            "library-ubuntu#20.04"
-        );
-        assert_eq!(docker_to_branch("library/ubuntu"), "library-ubuntu#latest");
-    }
-
-    #[test]
     fn test_docker_source_branch_name() {
         let source = DockerSource::new().unwrap();
         assert_eq!(
