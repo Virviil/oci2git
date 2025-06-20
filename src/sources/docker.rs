@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context, Result};
-use log::{info, warn};
+use log::info;
 use std::path::PathBuf;
 use std::process::Command;
 use tempfile::TempDir;
@@ -55,7 +55,7 @@ impl Source for DockerSource {
                 let error_msg = e.to_string();
                 // Check if the error is about missing image
                 if error_msg.contains("No such image") || error_msg.contains("pull access denied") {
-                    warn!("Image '{}' not found locally, attempting to pull...", image_name);
+                    info!("Image '{}' not found locally, attempting to pull...", image_name);
                     
                     // Try to pull the image
                     info!("Pulling Docker image '{}'...", image_name);
