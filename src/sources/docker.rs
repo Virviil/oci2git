@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context, Result};
-use log::info;
+use log::{info, warn};
 use std::path::PathBuf;
 use std::process::Command;
 use tempfile::TempDir;
@@ -42,10 +42,38 @@ impl Source for DockerSource {
 
         // Use docker save to export the full image with all layers
         info!("Exporting Docker image '{}' to tarball...", image_name);
-        self.run_command(&["save", "-o", tarball_path.to_str().unwrap(), image_name])?;
-
-        // Return both the tarball path and the tempdir to ensure it stays alive
-        Ok((tarball_path, Some(temp_dir)))
+        
+        // Try to save the image first
+        let save_result = self.run_command(&["save", "-o", tarball_path.to_str().unwrap(), image_name]);
+        
+        match save_result {
+            Ok(_) => {
+                // Success - return the tarball path
+                Ok((tarball_path, Some(temp_dir)))
+            }
+            Err(e) => {
+                let error_msg = e.to_string();
+                // Check if the error is about missing image
+                if error_msg.contains("No such image") || error_msg.contains("pull access denied") {
+                    warn!("Image '{}' not found locally, attempting to pull...", image_name);
+                    
+                    // Try to pull the image
+                    info!("Pulling Docker image '{}'...", image_name);
+                    self.run_command(&["pull", image_name])
+                        .context(format!("Failed to pull image '{}'", image_name))?;
+                    
+                    // Retry the save command after successful pull
+                    info!("Retrying export of Docker image '{}' to tarball...", image_name);
+                    self.run_command(&["save", "-o", tarball_path.to_str().unwrap(), image_name])
+                        .context(format!("Failed to save image '{}' after pull", image_name))?;
+                    
+                    Ok((tarball_path, Some(temp_dir)))
+                } else {
+                    // Different error - propagate it
+                    Err(e)
+                }
+            }
+        }
     }
 
     fn branch_name(&self, image_name: &str, image_digest: &str) -> String {
