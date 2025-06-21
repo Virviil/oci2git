@@ -1,8 +1,17 @@
-use anyhow::Result;
-use std::path::PathBuf;
-use tempfile::TempDir;
+pub mod docker;
+pub mod nerdctl;
+pub mod tar;
 
-use crate::notifier::Notifier;
+// Naming utilities for branch name generation
+pub mod naming;
+
+// Source trait
+mod source;
+pub use source::Source;
+
+pub use docker::DockerSource;
+pub use nerdctl::NerdctlSource;
+pub use tar::TarSource;
 
 /// Sanitizes a string to be safe for Git branch naming
 /// Removes/replaces characters that are problematic in Git branch names
@@ -38,41 +47,6 @@ pub fn extract_short_digest(image_id: &str) -> Option<String> {
         .strip_prefix("sha256:")
         .map(|digest| digest.chars().take(12).collect())
 }
-
-/// Source trait for getting OCI images from different container sources
-pub trait Source {
-    /// Returns the name of the source for identification purposes
-    fn name(&self) -> &str;
-
-    /// Retrieves an OCI image tarball and returns the path to it along with temp directory if created
-    /// The image_name parameter can be an image reference (for registry sources)
-    /// or a filesystem path (for local sources)
-    ///
-    /// Returns a tuple with the path to the tarball and an optional TempDir that needs to be kept alive
-    /// for the duration of the tarball use
-    fn get_image_tarball(
-        &self,
-        image_name: &str,
-        notifier: &Notifier,
-    ) -> Result<(PathBuf, Option<TempDir>)>;
-
-    /// Generates a Git branch name from the image name/path
-    /// Each source type implements its own naming strategy
-    /// The image_digest parameter is mandatory and provided by the processor after extracting metadata
-    fn branch_name(&self, image_name: &str, image_digest: &str) -> String;
-}
-
-// Re-export source implementations
-pub mod docker;
-pub mod nerdctl;
-pub mod tar;
-
-// Naming utilities for branch name generation
-pub mod naming;
-
-pub use docker::DockerSource;
-pub use nerdctl::NerdctlSource;
-pub use tar::TarSource;
 
 #[cfg(test)]
 mod tests {
