@@ -109,9 +109,9 @@ impl Source for DockerSource {
         }
     }
 
-    fn branch_name(&self, image_name: &str, image_digest: &str) -> String {
+    fn branch_name(&self, image_name: &str, os_arch: &str, image_digest: &str) -> String {
         let base_branch = naming::container_image_to_branch(image_name);
-        naming::combine_branch_with_digest(&base_branch, image_digest)
+        naming::combine_branch_with_digest(&base_branch, os_arch, image_digest)
     }
 }
 
@@ -123,25 +123,29 @@ mod tests {
     fn test_docker_source_branch_name() {
         let source = DockerSource::new().unwrap();
         assert_eq!(
-            source.branch_name("hello-world:latest", "sha256:1234567890abcdef"),
-            "hello-world#latest#1234567890ab"
+            source.branch_name(
+                "hello-world:latest",
+                "linux-amd64",
+                "sha256:1234567890abcdef"
+            ),
+            "hello-world#latest#linux-amd64#1234567890ab"
         );
         assert_eq!(
-            source.branch_name("hello-world", "sha256:1234567890abcdef"),
-            "hello-world#latest#1234567890ab"
+            source.branch_name("hello-world", "linux-arm64", "sha256:1234567890abcdef"),
+            "hello-world#latest#linux-arm64#1234567890ab"
         );
         assert_eq!(
-            source.branch_name("nginx/nginx:1.21", "sha256:9876543210fedcba"),
-            "nginx-nginx#1.21#9876543210fe"
+            source.branch_name("nginx/nginx:1.21", "linux-amd64", "sha256:9876543210fedcba"),
+            "nginx-nginx#1.21#linux-amd64#9876543210fe"
         );
         assert_eq!(
-            source.branch_name("nginx", "sha256:abcdef123456789"),
-            "nginx#latest#abcdef123456"
+            source.branch_name("nginx", "windows-amd64", "sha256:abcdef123456789"),
+            "nginx#latest#windows-amd64#abcdef123456"
         );
         // Test fallback for digest without sha256: prefix
         assert_eq!(
-            source.branch_name("nginx", "abcdef123456789"),
-            "nginx#latest#abcdef123456789"
+            source.branch_name("nginx", "linux-amd64", "abcdef123456789"),
+            "nginx#latest#linux-amd64#abcdef123456789"
         );
     }
 }

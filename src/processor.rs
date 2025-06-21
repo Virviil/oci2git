@@ -106,11 +106,12 @@ impl<S: Source> ImageProcessor<S> {
         self.notifier.info("Initializing Git repository...");
 
         // Create branch name using polymorphic method from source
+        let os_arch = format!("{}-{}", metadata.os, metadata.architecture);
         self.notifier.debug(&format!(
-            "Creating branch name for image '{}' with digest: '{}'",
-            image_name, metadata.id
+            "Creating branch name for image '{}' with os-arch '{}' and digest: '{}'",
+            image_name, os_arch, metadata.id
         ));
-        let branch_name = self.source.branch_name(image_name, &metadata.id);
+        let branch_name = self.source.branch_name(image_name, &os_arch, &metadata.id);
         self.notifier
             .debug(&format!("Generated branch name: '{}'", branch_name));
 
