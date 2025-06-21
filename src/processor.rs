@@ -1,10 +1,9 @@
 use crate::git::GitRepo;
 use crate::metadata::{self, ImageMetadata};
+use crate::notifier::Notifier;
 use crate::sources::Source;
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use log::{debug, info, trace, warn};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -20,67 +19,35 @@ pub struct Layer {
 
 pub struct ImageProcessor<S: Source> {
     source: S,
+    notifier: Notifier,
 }
 
 impl<S: Source> ImageProcessor<S> {
-    pub fn new(source: S) -> Self {
-        Self { source }
+    pub fn new(source: S, notifier: Notifier) -> Self {
+        Self { source, notifier }
     }
 
-    pub fn convert(
-        &self,
-        image_name: &str,
-        output_dir: &Path,
-        beautiful_progress: bool,
-    ) -> Result<()> {
-        info!(
+    pub fn convert(&self, image_name: &str, output_dir: &Path) -> Result<()> {
+        self.notifier.info(&format!(
             "Starting conversion of image with {} source: {}",
             self.source.name(),
             image_name
-        );
-        debug!("Output directory: {}", output_dir.display());
-        debug!("Beautiful progress: {}", beautiful_progress);
+        ));
+        self.notifier
+            .debug(&format!("Output directory: {}", output_dir.display()));
 
         // Store all temporary directories we need to keep alive during processing
         // They will be automatically cleaned up when they go out of scope at the end of this function
         let mut temp_dirs: Vec<tempfile::TempDir> = Vec::new();
 
-        // Setup progress reporting - just one spinner for the active task and one progress bar when needed
-        let multi_progress = MultiProgress::new();
-        let spinner_style = ProgressStyle::default_spinner()
-            .template("{spinner:.green} {msg}")
-            .unwrap();
-        let progress_style = ProgressStyle::default_bar()
-            .template(
-                "{spinner:.green} [{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
-            )
-            .unwrap()
-            .progress_chars("=> ");
-
-        // Create just one spinner for all active tasks
-        let spinner = if beautiful_progress {
-            let pb = multi_progress.add(ProgressBar::new_spinner());
-            pb.set_style(spinner_style);
-            pb.enable_steady_tick(std::time::Duration::from_millis(100));
-            Some(pb)
-        } else {
-            None
-        };
-
         // Get the image tarball from the source
-        if let Some(pb) = &spinner {
-            pb.set_message(format!(
-                "Getting image tarball using {} source...",
-                self.source.name()
-            ));
-        } else {
-            info!(
-                "Getting image tarball using {} source...",
-                self.source.name()
-            );
-        }
+        self.notifier.info(&format!(
+            "Getting image tarball using {} source...",
+            self.source.name()
+        ));
 
-        let (tarball_path, tarball_temp_dir) = self.source.get_image_tarball(image_name)?;
+        let (tarball_path, tarball_temp_dir) =
+            self.source.get_image_tarball(image_name, &self.notifier)?;
 
         // Store the tarball temp dir if it exists
         if let Some(temp_dir) = tarball_temp_dir {
@@ -88,56 +55,38 @@ impl<S: Source> ImageProcessor<S> {
         }
 
         // Extract the tarball
-        if let Some(pb) = &spinner {
-            pb.set_message("Extracting image tarball...");
-        } else {
-            info!("Extracting image tarball...");
-        }
+        self.notifier.info("Extracting image tarball...");
 
         let (extract_dir, extract_temp_dir) = self.extract_tarball(&tarball_path)?;
         temp_dirs.push(extract_temp_dir);
 
         // Get the layers in chronological order (oldest to newest)
-        if let Some(pb) = &spinner {
-            pb.set_message("Analyzing image layers...");
-        } else {
-            info!("Analyzing image layers...");
-        }
+        self.notifier.info("Analyzing image layers...");
 
         let layers = self.get_layers(&extract_dir)?;
-        debug!("Found {} layers in the image", layers.len());
+        self.notifier
+            .debug(&format!("Found {} layers in the image", layers.len()));
 
-        if let Some(pb) = &spinner {
-            pb.set_message("Extracting image metadata...");
-        } else {
-            info!("Extracting image metadata...");
-        }
+        self.notifier.info("Extracting image metadata...");
 
         let metadata = self.get_metadata(&extract_dir, image_name)?;
-        debug!("Image ID: {}", metadata.id);
+        self.notifier.debug(&format!("Image ID: {}", metadata.id));
 
-        if let Some(pb) = &spinner {
-            pb.set_message("Initializing Git repository...");
-        } else {
-            info!("Initializing Git repository...");
-        }
+        self.notifier.info("Initializing Git repository...");
 
         // Create branch name using polymorphic method from source
-        debug!(
+        self.notifier.debug(&format!(
             "Creating branch name for image '{}' with digest: '{}'",
             image_name, metadata.id
-        );
+        ));
         let branch_name = self.source.branch_name(image_name, &metadata.id);
-        debug!("Generated branch name: '{}'", branch_name);
+        self.notifier
+            .debug(&format!("Generated branch name: '{}'", branch_name));
 
         let repo = GitRepo::init_with_branch(output_dir, Some(&branch_name))?;
 
         // First commit: Add Image.md with metadata
-        if let Some(pb) = &spinner {
-            pb.set_message("Creating metadata commit...");
-        } else {
-            info!("Creating metadata commit...");
-        }
+        self.notifier.info("Creating metadata commit...");
 
         let metadata_path = output_dir.join("Image.md");
         metadata::generate_markdown_metadata(&metadata, &metadata_path)?;
@@ -148,79 +97,58 @@ impl<S: Source> ImageProcessor<S> {
         fs::create_dir_all(&rootfs_dir)?;
 
         // Get layer tarballs to process one by one
-        if let Some(pb) = &spinner {
-            pb.set_message("Locating layer tarballs...");
-        } else {
-            info!("Locating layer tarballs...");
-        }
+        self.notifier.info("Locating layer tarballs...");
 
         let layer_tarballs = self.get_layer_tarballs(&extract_dir)?;
-        debug!("Found {} layer tarballs", layer_tarballs.len());
+        self.notifier
+            .debug(&format!("Found {} layer tarballs", layer_tarballs.len()));
 
         // If there are no layers, exit early
         if layers.is_empty() {
-            warn!("No layers found in the image");
-            if let Some(pb) = &spinner {
-                pb.finish_with_message("Warning: No layers found in the image");
-            }
+            self.notifier.warn("No layers found in the image");
+            self.notifier.info("Warning: No layers found in the image");
             return Ok(());
         }
 
         // If there are no layer tarballs (possibly because the engine doesn't support them),
         // we extract the whole image and commit it as one
         if layer_tarballs.is_empty() {
-            info!("No layer tarballs available, extracting entire image at once");
+            self.notifier
+                .info("No layer tarballs available, extracting entire image at once");
 
-            if let Some(pb) = &spinner {
-                pb.set_message("Extracting entire image...");
-            } else {
-                info!("Extracting entire image...");
-            }
+            self.notifier.info("Extracting entire image...");
 
             // Extract directly to the rootfs directory - compatibility with tests
             self.extract_full_image(&extract_dir, &rootfs_dir)?;
 
-            if let Some(pb) = &spinner {
-                pb.set_message("Committing filesystem changes...");
-            } else {
-                info!("Committing filesystem changes...");
-            }
+            self.notifier.info("Committing filesystem changes...");
 
             // Commit all files at once
             repo.commit_all_changes("Extract container filesystem")?;
 
             // Still create empty commits for layer info
-            if let Some(pb) = &spinner {
-                pb.set_message(format!("Creating {} layer commits...", layers.len()));
-            } else {
-                info!("Creating {} layer commits...", layers.len());
-            }
+            self.notifier
+                .info(&format!("Creating {} layer commits...", layers.len()));
 
             for (i, layer) in layers.iter().enumerate() {
-                debug!(
+                self.notifier.debug(&format!(
                     "Creating empty commit for layer {}/{}: {}",
                     i + 1,
                     layers.len(),
                     layer.command
-                );
+                ));
                 repo.create_empty_commit(&format!("Layer: {}", layer.command))?;
 
-                if let Some(pb) = &spinner {
-                    if i % 10 == 0 {
-                        pb.set_message(format!(
-                            "Creating layer commits... {}/{}",
-                            i + 1,
-                            layers.len()
-                        ));
-                    }
+                if i % 10 == 0 {
+                    self.notifier.info(&format!(
+                        "Creating layer commits... {}/{}",
+                        i + 1,
+                        layers.len()
+                    ));
                 }
             }
 
-            if let Some(pb) = &spinner {
-                pb.finish_with_message("Conversion completed successfully!");
-            } else {
-                info!("Conversion completed successfully!");
-            }
+            self.notifier.info("Conversion completed successfully!");
 
             return Ok(());
         }
@@ -229,11 +157,7 @@ impl<S: Source> ImageProcessor<S> {
         // We'll process all layers from the history, but only extract the real layer tarballs
 
         // Create a temporary directory for layer extraction
-        if let Some(pb) = &spinner {
-            pb.set_message("Preparing layer extraction...");
-        } else {
-            info!("Preparing layer extraction...");
-        }
+        self.notifier.info("Preparing layer extraction...");
 
         // Create a temporary directory for layer extraction and keep a reference to its path
         let temp_layer_dir = tempfile::tempdir()?;
@@ -252,12 +176,15 @@ impl<S: Source> ImageProcessor<S> {
         // Count how many non-empty layers are in the history
         let non_empty_layers = layers.iter().filter(|l| !l.is_empty).count();
 
-        debug!(
+        self.notifier.debug(&format!(
             "History has {} layers, with {} non-empty layers",
             layers.len(),
             non_empty_layers
-        );
-        debug!("Manifest has {} layer tarballs", layer_tarballs.len());
+        ));
+        self.notifier.debug(&format!(
+            "Manifest has {} layer tarballs",
+            layer_tarballs.len()
+        ));
 
         // There are two main cases:
         // 1. We have same number of non-empty layers as tarballs (good case)
@@ -268,7 +195,8 @@ impl<S: Source> ImageProcessor<S> {
 
         if non_empty_layers == layer_tarballs.len() {
             // Good case: we can match non-empty layers to tarballs 1:1
-            debug!("Non-empty layer count matches tarball count - can map 1:1");
+            self.notifier
+                .debug("Non-empty layer count matches tarball count - can map 1:1");
 
             let mut tarball_index = 0;
             for (i, layer) in layers.iter().enumerate() {
@@ -280,8 +208,10 @@ impl<S: Source> ImageProcessor<S> {
         } else {
             // Complex case: we have a mismatch
             // Just match as many as we can from the beginning
-            warn!("Non-empty layer count doesn't match tarball count");
-            debug!("Will match tarballs to layers in order");
+            self.notifier
+                .warn("Non-empty layer count doesn't match tarball count");
+            self.notifier
+                .debug("Will match tarballs to layers in order");
 
             let mut tarball_index = 0;
             for has_tarball in layer_has_tarball.iter_mut() {
@@ -293,31 +223,20 @@ impl<S: Source> ImageProcessor<S> {
         }
 
         // Now process all history layers
-        if let Some(pb) = &spinner {
-            pb.set_message(format!("Processing {} layers...", layers.len()));
-        } else {
-            info!("Processing {} layers...", layers.len());
-        }
+        self.notifier
+            .info(&format!("Processing {} layers...", layers.len()));
 
         for (i, layer) in layers.iter().enumerate() {
             let has_tarball = layer_has_tarball[i];
 
-            if let Some(pb) = &spinner {
-                pb.set_message(format!(
-                    "Layer {}/{}: {}",
-                    i + 1,
-                    layers.len(),
-                    layer.command
-                ));
-            } else {
-                info!(
-                    "Processing layer {}/{}: {}",
-                    i + 1,
-                    layers.len(),
-                    layer.command
-                );
-                debug!("Layer has tarball: {}", has_tarball);
-            }
+            self.notifier.info(&format!(
+                "Layer {}/{}: {}",
+                i + 1,
+                layers.len(),
+                layer.command
+            ));
+            self.notifier
+                .debug(&format!("Layer has tarball: {}", has_tarball));
 
             if layer.is_empty || !has_tarball {
                 // Create an empty commit for layers without file changes
@@ -328,7 +247,10 @@ impl<S: Source> ImageProcessor<S> {
                     format!("⚫ - {}", layer.command)
                 };
 
-                debug!("Creating empty commit for layer: {}", layer.command);
+                self.notifier.debug(&format!(
+                    "Creating empty commit for layer: {}",
+                    layer.command
+                ));
                 repo.create_empty_commit(&commit_message)?;
                 continue;
             }
@@ -339,15 +261,18 @@ impl<S: Source> ImageProcessor<S> {
                 .filter(|&&has_tarball| has_tarball)
                 .count();
 
-            debug!("Using tarball index {} for layer {}", tarball_idx, i);
+            self.notifier.debug(&format!(
+                "Using tarball index {} for layer {}",
+                tarball_idx, i
+            ));
 
             if tarball_idx >= layer_tarballs.len() {
                 // Should not happen with our mapping, but just in case
-                warn!(
+                self.notifier.warn(&format!(
                     "Tarball index {} out of bounds (max {})",
                     tarball_idx,
                     layer_tarballs.len() - 1
-                );
+                ));
                 repo.create_empty_commit(&format!("Layer (tarball not found): {}", layer.command))?;
                 continue;
             }
@@ -355,11 +280,11 @@ impl<S: Source> ImageProcessor<S> {
             let layer_tarball = &layer_tarballs[tarball_idx];
 
             // Extract this layer to the temporary directory
-            if let Some(pb) = &spinner {
-                pb.set_message(format!("Extracting layer {}/{}", i + 1, layers.len()));
-            }
+            self.notifier
+                .info(&format!("Extracting layer {}/{}", i + 1, layers.len()));
 
-            debug!("Extracting tarball: {:?}", layer_tarball);
+            self.notifier
+                .debug(&format!("Extracting tarball: {:?}", layer_tarball));
             fs::create_dir_all(&temp_layer_path)?;
 
             // Extract the layer tarball to the temp directory
@@ -389,42 +314,35 @@ impl<S: Source> ImageProcessor<S> {
                 .into_iter()
                 .count();
 
-            if let Some(pb) = &spinner {
-                pb.set_message(format!(
-                    "Processing {} files in layer {}/{}",
-                    entry_count,
-                    i + 1,
-                    layers.len()
-                ));
-            } else {
-                info!(
-                    "Processing {} files in layer {}/{}",
-                    entry_count,
-                    i + 1,
-                    layers.len()
-                );
-            }
+            self.notifier.info(&format!(
+                "Processing {} files in layer {}/{}",
+                entry_count,
+                i + 1,
+                layers.len()
+            ));
 
-            // Create a new progress bar only if we have enough files and beautiful progress is enabled
-            let file_progress = if beautiful_progress && entry_count > 50 {
-                let pb = multi_progress.add(ProgressBar::new(entry_count as u64));
-                pb.set_style(progress_style.clone());
-                pb.set_message(format!("Files in layer {}/{}", i + 1, layers.len()));
-                Some(pb)
-            } else {
-                None
-            };
+            // Create a new progress bar if we have enough files
+            let file_progress = self.notifier.create_progress_bar(
+                entry_count as u64,
+                &format!("Files in layer {}/{}", i + 1, layers.len()),
+            );
 
             let mut processed_files = 0;
             for entry in walkdir::WalkDir::new(&temp_layer_path).follow_links(false) {
                 let entry = entry.context("Failed to read directory entry")?;
                 let source_path = entry.path();
 
+                processed_files += 1;
                 if let Some(pb) = &file_progress {
-                    processed_files += 1;
                     if processed_files % 100 == 0 || processed_files == entry_count {
                         pb.set_position(processed_files as u64);
                     }
+                } else {
+                    self.notifier.progress(
+                        processed_files as u64,
+                        entry_count as u64,
+                        "Processing files",
+                    );
                 }
 
                 // Skip the temp directory itself
@@ -453,7 +371,10 @@ impl<S: Source> ImageProcessor<S> {
                         // If the opaque directory exists, we need to remove all its contents
                         // but keep the directory itself
                         if opaque_dir.exists() && opaque_dir.is_dir() {
-                            debug!("Found opaque directory marker for {:?}", parent_dir);
+                            self.notifier.debug(&format!(
+                                "Found opaque directory marker for {:?}",
+                                parent_dir
+                            ));
 
                             // Remove all entries in the directory
                             for path in std::fs::read_dir(&opaque_dir)
@@ -479,7 +400,8 @@ impl<S: Source> ImageProcessor<S> {
                             .unwrap_or_else(|| std::path::Path::new(""));
                         let deleted_path = rootfs_dir.join(parent_dir).join(deleted_name);
 
-                        debug!("Found whiteout marker for {:?}", deleted_path);
+                        self.notifier
+                            .debug(&format!("Found whiteout marker for {:?}", deleted_path));
 
                         // Remove the file or directory that this whiteout refers to
                         if deleted_path.exists() {
@@ -518,20 +440,20 @@ impl<S: Source> ImageProcessor<S> {
                     // Create the symlink
                     if let Err(err) = std::os::unix::fs::symlink(&link_target, &target_path) {
                         if err.kind() == std::io::ErrorKind::PermissionDenied {
-                            warn!(
+                            self.notifier.warn(&format!(
                                 "Permission denied creating symlink {:?} -> {:?} - skipping",
                                 target_path, link_target
-                            );
+                            ));
                         }
                     }
                 } else if source_path.is_dir() {
                     // Create the directory
                     if let Err(err) = fs::create_dir_all(&target_path) {
                         if err.kind() == std::io::ErrorKind::PermissionDenied {
-                            warn!(
+                            self.notifier.warn(&format!(
                                 "Permission denied creating directory {:?} - skipping",
                                 target_path
-                            );
+                            ));
                         }
                     }
                 } else if source_path.is_file() {
@@ -552,15 +474,17 @@ impl<S: Source> ImageProcessor<S> {
                     // Copy the file
                     if let Err(err) = fs::copy(source_path, &target_path) {
                         if err.kind() == std::io::ErrorKind::PermissionDenied {
-                            warn!("Permission denied copying {:?} - skipping", source_path);
+                            self.notifier.warn(&format!(
+                                "Permission denied copying {:?} - skipping",
+                                source_path
+                            ));
                         }
                     }
                 }
             }
 
-            // Finish and completely remove the progress bar when done
+            // Finish the progress bar when done
             if let Some(pb) = file_progress {
-                // This will finish and remove the progress bar completely
                 pb.finish_and_clear();
             }
 
@@ -569,16 +493,16 @@ impl<S: Source> ImageProcessor<S> {
             fs::create_dir_all(&temp_layer_path)?;
 
             // Commit the changes for this layer
-            if let Some(pb) = &spinner {
-                pb.set_message(format!("Committing layer {}/{}", i + 1, layers.len()));
-            } else {
-                info!("Committing layer {}/{}", i + 1, layers.len());
-            }
+            self.notifier
+                .info(&format!("Committing layer {}/{}", i + 1, layers.len()));
 
             let has_changes = repo.commit_all_changes(&format!("🟢 - {}", layer.command))?;
 
             if !has_changes {
-                debug!("No changes detected for layer {}, creating empty commit", i);
+                self.notifier.debug(&format!(
+                    "No changes detected for layer {}, creating empty commit",
+                    i
+                ));
                 repo.create_empty_commit(&format!(
                     "Layer (no detected changes): {}",
                     layer.command
@@ -593,11 +517,7 @@ impl<S: Source> ImageProcessor<S> {
             image_name,
             output_dir.display()
         );
-        if let Some(pb) = &spinner {
-            pb.finish_with_message(msg);
-        } else {
-            info!("{msg}");
-        }
+        self.notifier.info(&msg);
 
         Ok(())
     }
@@ -678,7 +598,8 @@ impl<S: Source> ImageProcessor<S> {
         let mut layers = Vec::new();
 
         // Track each history entry
-        debug!("Image history entries (oldest to newest):");
+        self.notifier
+            .debug("Image history entries (oldest to newest):");
 
         // History is usually stored newest to oldest, so process in reverse
         for (i, hist_entry) in history.iter().enumerate().rev() {
@@ -731,13 +652,13 @@ impl<S: Source> ImageProcessor<S> {
                 format!("<empty-layer-{}>", i)
             };
 
-            trace!(
+            self.notifier.trace(&format!(
                 "Layer {}: {} | Empty: {} | Command: {}",
                 i, // Zero-based indexing
                 id,
                 is_empty,
                 command
-            );
+            ));
 
             layers.push(Layer {
                 id,
@@ -750,7 +671,8 @@ impl<S: Source> ImageProcessor<S> {
         // Since we processed history in reverse order, reverse the layers to get oldest first
         layers.reverse();
 
-        debug!("Found {} layers in image history", layers.len());
+        self.notifier
+            .debug(&format!("Found {} layers in image history", layers.len()));
 
         Ok(layers)
     }
@@ -773,7 +695,10 @@ impl<S: Source> ImageProcessor<S> {
         let config_file = manifest[0]["Config"]
             .as_str()
             .ok_or_else(|| anyhow!("Invalid manifest format - missing Config"))?;
-        debug!("Config file path from manifest: '{}'", config_file);
+        self.notifier.debug(&format!(
+            "Config file path from manifest: '{}'",
+            config_file
+        ));
 
         // Read the config file as JSON
         let config_path = extract_dir.join(config_file);
@@ -790,18 +715,21 @@ impl<S: Source> ImageProcessor<S> {
         // Extract digest from config file path (format: blobs/sha256/HASH)
         if let Some(digest_hash) = config_file.strip_prefix("blobs/sha256/") {
             metadata.id = format!("sha256:{}", digest_hash);
-            debug!("Extracted image digest from blob path: '{}'", metadata.id);
+            self.notifier.debug(&format!(
+                "Extracted image digest from blob path: '{}'",
+                metadata.id
+            ));
         } else if let Some(digest_hash) = config_file.strip_suffix(".json") {
             metadata.id = format!("sha256:{}", digest_hash);
-            debug!(
+            self.notifier.debug(&format!(
                 "Extracted image digest from config filename: '{}'",
                 metadata.id
-            );
+            ));
         } else {
-            debug!(
+            self.notifier.debug(&format!(
                 "Could not extract digest from config path '{}', using metadata default",
                 config_file
-            );
+            ));
         }
 
         // Add repo tags from the manifest (these are not in the config)
@@ -848,14 +776,14 @@ impl<S: Source> ImageProcessor<S> {
         // Store the layer tarball paths in order
         let mut layer_paths = Vec::new();
 
-        debug!("Layer tarballs in manifest:");
+        self.notifier.debug("Layer tarballs in manifest:");
         for (i, layer) in layers.iter().enumerate() {
             let layer_path = layer
                 .as_str()
                 .ok_or_else(|| anyhow!("Invalid layer path in manifest"))?;
 
             let full_path = extract_dir.join(layer_path);
-            trace!("Layer {}: {}", i, layer_path);
+            self.notifier.trace(&format!("Layer {}: {}", i, layer_path));
 
             layer_paths.push(full_path);
         }

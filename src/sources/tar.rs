@@ -1,9 +1,9 @@
 use anyhow::{anyhow, Result};
-use log::info;
 use std::path::PathBuf;
 use tempfile::TempDir;
 
 use super::Source;
+use crate::notifier::Notifier;
 
 /// Extracts filename from a tar path and sanitizes it for Git branch naming
 /// Removes file extension and sanitizes problematic characters
@@ -31,7 +31,11 @@ impl Source for TarSource {
         "tar"
     }
 
-    fn get_image_tarball(&self, image_path: &str) -> Result<(PathBuf, Option<TempDir>)> {
+    fn get_image_tarball(
+        &self,
+        image_path: &str,
+        notifier: &Notifier,
+    ) -> Result<(PathBuf, Option<TempDir>)> {
         // For tar source, image_path is the path to the existing tarball
         let tarball_path = PathBuf::from(image_path);
 
@@ -55,7 +59,7 @@ impl Source for TarSource {
             .unwrap_or("");
 
         if extension != "tar" {
-            info!("Warning: File does not have .tar extension. Proceeding anyway, but this might not be a valid image tarball.");
+            notifier.info("Warning: File does not have .tar extension. Proceeding anyway, but this might not be a valid image tarball.");
         }
 
         // Just return the existing path - no temp dir needed for tar source

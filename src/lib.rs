@@ -1,10 +1,12 @@
 pub mod git;
 pub mod metadata;
+pub mod notifier;
 pub mod processor;
 pub mod sources;
 
 // Re-exports for easy access
 pub use git::GitRepo;
+pub use notifier::Notifier;
 pub use processor::ImageProcessor;
 pub use processor::Layer;
 pub use sources::DockerSource;

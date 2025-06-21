@@ -4,6 +4,7 @@ use std::process::Command;
 use tempfile::TempDir;
 
 use super::Source;
+use crate::notifier::Notifier;
 
 pub struct NerdctlSource;
 
@@ -27,7 +28,11 @@ impl Source for NerdctlSource {
         "nerdctl"
     }
 
-    fn get_image_tarball(&self, _image_name: &str) -> Result<(PathBuf, Option<TempDir>)> {
+    fn get_image_tarball(
+        &self,
+        _image_name: &str,
+        _notifier: &Notifier,
+    ) -> Result<(PathBuf, Option<TempDir>)> {
         // This will be implemented in the future
         unimplemented!("nerdctl support is not yet implemented")
     }

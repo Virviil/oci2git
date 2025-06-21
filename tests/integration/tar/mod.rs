@@ -6,6 +6,7 @@
 
 use crate::integration::common::tar_processing;
 use anyhow::Result;
+use oci2git::notifier::Notifier;
 use oci2git::processor::ImageProcessor;
 use oci2git::sources::{Source, TarSource};
 use std::io::Write;
@@ -35,7 +36,8 @@ mod tests {
         let temp_path = temp_file.path().to_str().unwrap();
 
         let tar_source = TarSource::new().expect("Should create TarSource");
-        let result = tar_source.get_image_tarball(temp_path);
+        let notifier = Notifier::new(0);
+        let result = tar_source.get_image_tarball(temp_path, &notifier);
 
         assert!(
             result.is_ok(),
@@ -64,8 +66,9 @@ mod tests {
     fn test_tar_source_with_nonexistent_file() {
         let tar_source = TarSource::new().expect("Should create TarSource");
         let nonexistent_path = "/path/that/definitely/does/not/exist.tar";
+        let notifier = Notifier::new(0);
 
-        let result = tar_source.get_image_tarball(nonexistent_path);
+        let result = tar_source.get_image_tarball(nonexistent_path, &notifier);
 
         // This might succeed or fail depending on implementation
         // Check the actual TarSource implementation to see expected behavior
@@ -94,7 +97,8 @@ mod tests {
         let file_name = temp_file.path().file_name().unwrap().to_str().unwrap();
 
         let tar_source = TarSource::new().expect("Should create TarSource");
-        let result = tar_source.get_image_tarball(file_name);
+        let notifier = Notifier::new(0);
+        let result = tar_source.get_image_tarball(file_name, &notifier);
 
         // The result will depend on TarSource implementation
         // Some implementations might resolve relative paths, others might not
@@ -137,10 +141,11 @@ mod tests {
 
         let output_dir = TempDir::new()?;
         let tar_source = TarSource::new()?;
-        let processor = ImageProcessor::new(tar_source);
+        let notifier = Notifier::new(0);
+        let processor = ImageProcessor::new(tar_source, notifier);
 
         // Process through universal backend
-        processor.convert(FIXTURE_TAR_PATH, output_dir.path(), false)?;
+        processor.convert(FIXTURE_TAR_PATH, output_dir.path())?;
 
         // Verify our test files using universal helpers
         let expected_files = [
@@ -168,10 +173,11 @@ mod tests {
 
         let output_dir = TempDir::new()?;
         let tar_source = TarSource::new()?;
-        let processor = ImageProcessor::new(tar_source);
+        let notifier = Notifier::new(0);
+        let processor = ImageProcessor::new(tar_source, notifier);
 
         // Process through universal backend
-        processor.convert(FIXTURE_TAR_PATH, output_dir.path(), false)?;
+        processor.convert(FIXTURE_TAR_PATH, output_dir.path())?;
 
         // Verify metadata using universal helpers
         let expected_vars = ["APP_NAME", "APP_VERSION", "DEBUG"];
@@ -196,10 +202,11 @@ mod tests {
 
         let output_dir = TempDir::new()?;
         let tar_source = TarSource::new()?;
-        let processor = ImageProcessor::new(tar_source);
+        let notifier = Notifier::new(0);
+        let processor = ImageProcessor::new(tar_source, notifier);
 
         // Process through universal backend
-        processor.convert(FIXTURE_TAR_PATH, output_dir.path(), false)?;
+        processor.convert(FIXTURE_TAR_PATH, output_dir.path())?;
 
         // Verify git structure using universal helpers
         tar_processing::verify_git_structure(output_dir.path())?;
