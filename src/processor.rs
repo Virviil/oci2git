@@ -4,9 +4,11 @@ use crate::notifier::Notifier;
 use crate::sources::Source;
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
-use std::fs;
+use flate2::read::GzDecoder;
+use std::fs::{self, File};
+use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use tar::Archive;
 use walkdir;
 
 #[derive(Debug, Clone)]
@@ -25,6 +27,35 @@ pub struct ImageProcessor<S: Source> {
 impl<S: Source> ImageProcessor<S> {
     pub fn new(source: S, notifier: Notifier) -> Self {
         Self { source, notifier }
+    }
+
+    // Helper function to extract a tar file, handling both compressed and uncompressed formats
+    fn extract_tar_file(&self, tar_path: &Path, extract_dir: &Path) -> Result<()> {
+        // Try to detect if the file is gzip compressed by checking the magic bytes
+        let mut file_for_detection = File::open(tar_path)?;
+        let mut magic_bytes = [0u8; 2];
+        file_for_detection.read_exact(&mut magic_bytes)?;
+
+        if magic_bytes == [0x1f, 0x8b] {
+            // This is a gzip file
+            let file = File::open(tar_path)?;
+            let reader = BufReader::new(file);
+            let decoder = GzDecoder::new(reader);
+            let mut archive = Archive::new(decoder);
+            archive
+                .unpack(extract_dir)
+                .context(format!("Failed to extract gzip tar file: {:?}", tar_path))?;
+        } else {
+            // This is a plain tar file
+            let file = File::open(tar_path)?;
+            let reader = BufReader::new(file);
+            let mut archive = Archive::new(reader);
+            archive
+                .unpack(extract_dir)
+                .context(format!("Failed to extract tar file: {:?}", tar_path))?;
+        }
+
+        Ok(())
     }
 
     pub fn convert(&self, image_name: &str, output_dir: &Path) -> Result<()> {
@@ -287,26 +318,8 @@ impl<S: Source> ImageProcessor<S> {
                 .debug(&format!("Extracting tarball: {:?}", layer_tarball));
             fs::create_dir_all(&temp_layer_path)?;
 
-            // Extract the layer tarball to the temp directory
-            let extract_status = Command::new("tar")
-                .args([
-                    "-xf",
-                    layer_tarball.to_str().unwrap(),
-                    "-C",
-                    temp_layer_path.to_str().unwrap(),
-                ])
-                .status()
-                .context(format!(
-                    "Failed to extract layer tarball: {:?}",
-                    layer_tarball
-                ))?;
-
-            if !extract_status.success() {
-                return Err(anyhow!(
-                    "Failed to extract layer content from {:?}",
-                    layer_tarball
-                ));
-            }
+            // Extract the layer tarball to the temp directory using tar crate
+            self.extract_tar_file(layer_tarball, &temp_layer_path)?;
 
             // Recursively copy all files from the temp layer directory to rootfs
             let entry_count = walkdir::WalkDir::new(&temp_layer_path)
@@ -526,20 +539,8 @@ impl<S: Source> ImageProcessor<S> {
         let extract_dir = temp_dir.path().join("extracted");
         std::fs::create_dir_all(&extract_dir)?;
 
-        // Extract the tarball to the extract directory
-        let status = Command::new("tar")
-            .args([
-                "-xf",
-                tarball_path.to_str().unwrap(),
-                "-C",
-                extract_dir.to_str().unwrap(),
-            ])
-            .status()
-            .context("Failed to extract image tarball")?;
-
-        if !status.success() {
-            return Err(anyhow!("Failed to extract image tarball"));
-        }
+        // Extract the tarball to the extract directory using tar crate
+        self.extract_tar_file(tarball_path, &extract_dir)?;
 
         // Verify the extracted content has the expected OCI structure
         let manifest_path = extract_dir.join("manifest.json");
@@ -800,23 +801,8 @@ impl<S: Source> ImageProcessor<S> {
         if !layer_tarballs.is_empty() {
             let layer_path = &layer_tarballs[0];
 
-            // Extract this layer tarball to the output directory
-            let extract_status = Command::new("tar")
-                .args([
-                    "-xf",
-                    layer_path.to_str().unwrap(),
-                    "-C",
-                    output_dir.to_str().unwrap(),
-                ])
-                .status()
-                .context(format!("Failed to extract layer tarball: {:?}", layer_path))?;
-
-            if !extract_status.success() {
-                return Err(anyhow!(
-                    "Failed to extract layer content from {:?}",
-                    layer_path
-                ));
-            }
+            // Extract this layer tarball to the output directory using tar crate
+            self.extract_tar_file(layer_path, output_dir)?;
         }
 
         Ok(())

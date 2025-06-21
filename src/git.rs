@@ -56,8 +56,8 @@ impl GitRepo {
     }
 
     pub fn commit_all_changes(&self, message: &str) -> Result<bool> {
-        let signature = Signature::now(USERNAME, EMAIL)
-            .context("Failed to create git signature")?;
+        let signature =
+            Signature::now(USERNAME, EMAIL).context("Failed to create git signature")?;
 
         let mut index = self.repo.index().context("Failed to get git index")?;
 
