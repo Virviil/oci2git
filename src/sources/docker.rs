@@ -1,10 +1,10 @@
 use anyhow::{anyhow, Context, Result};
-use log::info;
 use std::path::PathBuf;
 use std::process::Command;
 use tempfile::TempDir;
 
 use super::{naming, Source};
+use crate::notifier::Notifier;
 
 /// Docker implementation of the Source trait
 pub struct DockerSource;
@@ -28,6 +28,26 @@ impl DockerSource {
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         Ok(stdout)
     }
+
+    fn pull_image(&self, image_name: &str, notifier: &Notifier) -> Result<()> {
+        notifier.info(&format!("Pulling Docker image '{}'...", image_name));
+
+        let output = Command::new("docker")
+            .args(["pull", image_name])
+            .output()
+            .context("Failed to execute docker pull command")?;
+
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow!("Docker pull failed: {}", error));
+        }
+
+        notifier.info(&format!(
+            "Successfully pulled Docker image '{}'",
+            image_name
+        ));
+        Ok(())
+    }
 }
 
 impl Source for DockerSource {
@@ -35,17 +55,25 @@ impl Source for DockerSource {
         "docker"
     }
 
-    fn get_image_tarball(&self, image_name: &str) -> Result<(PathBuf, Option<TempDir>)> {
+    fn get_image_tarball(
+        &self,
+        image_name: &str,
+        notifier: &Notifier,
+    ) -> Result<(PathBuf, Option<TempDir>)> {
         // Create a temporary directory to save the image
         let temp_dir = TempDir::new().context("Failed to create temporary directory")?;
         let tarball_path = temp_dir.path().join("image.tar");
 
         // Use docker save to export the full image with all layers
-        info!("Exporting Docker image '{}' to tarball...", image_name);
-        
+        notifier.info(&format!(
+            "Exporting Docker image '{}' to tarball...",
+            image_name
+        ));
+
         // Try to save the image first
-        let save_result = self.run_command(&["save", "-o", tarball_path.to_str().unwrap(), image_name]);
-        
+        let save_result =
+            self.run_command(&["save", "-o", tarball_path.to_str().unwrap(), image_name]);
+
         match save_result {
             Ok(_) => {
                 // Success - return the tarball path
@@ -55,18 +83,23 @@ impl Source for DockerSource {
                 let error_msg = e.to_string();
                 // Check if the error is about missing image
                 if error_msg.contains("No such image") || error_msg.contains("pull access denied") {
-                    info!("Image '{}' not found locally, attempting to pull...", image_name);
-                    
+                    notifier.info(&format!(
+                        "Image '{}' not found locally, attempting to pull...",
+                        image_name
+                    ));
+
                     // Try to pull the image
-                    info!("Pulling Docker image '{}'...", image_name);
-                    self.run_command(&["pull", image_name])
+                    self.pull_image(image_name, notifier)
                         .context(format!("Failed to pull image '{}'", image_name))?;
-                    
+
                     // Retry the save command after successful pull
-                    info!("Retrying export of Docker image '{}' to tarball...", image_name);
+                    notifier.info(&format!(
+                        "Retrying export of Docker image '{}' to tarball...",
+                        image_name
+                    ));
                     self.run_command(&["save", "-o", tarball_path.to_str().unwrap(), image_name])
                         .context(format!("Failed to save image '{}' after pull", image_name))?;
-                    
+
                     Ok((tarball_path, Some(temp_dir)))
                 } else {
                     // Different error - propagate it

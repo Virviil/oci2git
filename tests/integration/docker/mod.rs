@@ -6,6 +6,7 @@
 #[cfg(all(test, feature = "docker"))]
 mod tests {
     use crate::integration::common::*;
+    use oci2git::notifier::Notifier;
     use oci2git::processor::ImageProcessor;
     use oci2git::sources::{DockerSource, Source};
     use std::fs;
@@ -27,7 +28,8 @@ mod tests {
     fn test_docker_image_download_hello_world() {
         let image_name = "hello-world:latest";
         let docker_source = DockerSource::new().expect("Should create DockerSource");
-        let result = docker_source.get_image_tarball(image_name);
+        let notifier = Notifier::new(0);
+        let result = docker_source.get_image_tarball(image_name, &notifier);
 
         assert!(result.is_ok(), "Should successfully download image tarball");
 
@@ -50,7 +52,8 @@ mod tests {
     fn test_docker_image_download_alpine() {
         let image_name = "alpine:latest";
         let docker_source = DockerSource::new().expect("Should create DockerSource");
-        let result = docker_source.get_image_tarball(image_name);
+        let notifier = Notifier::new(0);
+        let result = docker_source.get_image_tarball(image_name, &notifier);
 
         assert!(
             result.is_ok(),
@@ -84,8 +87,9 @@ mod tests {
     #[test]
     fn test_docker_image_download_nonexistent() {
         let docker_source = DockerSource::new().expect("Should create DockerSource");
+        let notifier = Notifier::new(0);
 
-        let result = docker_source.get_image_tarball(NONEXISTENT_IMAGE);
+        let result = docker_source.get_image_tarball(NONEXISTENT_IMAGE, &notifier);
 
         assert!(result.is_err(), "Should fail to download nonexistent image");
 

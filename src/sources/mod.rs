@@ -2,6 +2,8 @@ use anyhow::Result;
 use std::path::PathBuf;
 use tempfile::TempDir;
 
+use crate::notifier::Notifier;
+
 /// Sanitizes a string to be safe for Git branch naming
 /// Removes/replaces characters that are problematic in Git branch names
 pub fn sanitize_branch_name(name: &str) -> String {
@@ -48,7 +50,11 @@ pub trait Source {
     ///
     /// Returns a tuple with the path to the tarball and an optional TempDir that needs to be kept alive
     /// for the duration of the tarball use
-    fn get_image_tarball(&self, image_name: &str) -> Result<(PathBuf, Option<TempDir>)>;
+    fn get_image_tarball(
+        &self,
+        image_name: &str,
+        notifier: &Notifier,
+    ) -> Result<(PathBuf, Option<TempDir>)>;
 
     /// Generates a Git branch name from the image name/path
     /// Each source type implements its own naming strategy

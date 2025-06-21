@@ -5,6 +5,7 @@
 //! functionality that's shared across all sources.
 
 use anyhow::Result;
+use oci2git::notifier::Notifier;
 use oci2git::processor::ImageProcessor;
 use oci2git::sources::Source;
 use std::fs;
@@ -14,10 +15,11 @@ use tempfile::TempDir;
 /// Test helper: Process any tar file and verify basic structure
 pub fn test_basic_tar_processing<S: Source>(source: S, tar_path: &str) -> Result<()> {
     let output_dir = TempDir::new()?;
-    let processor = ImageProcessor::new(source);
+    let notifier = Notifier::new(0);
+    let processor = ImageProcessor::new(source, notifier);
 
     // Process the tar file
-    processor.convert(tar_path, output_dir.path(), false)?;
+    processor.convert(tar_path, output_dir.path())?;
 
     // Verify git repository was created
     let git_dir = output_dir.path().join(".git");
@@ -133,10 +135,11 @@ mod tests {
 
         let output_dir = TempDir::new()?;
         let tar_source = TarSource::new()?;
-        let processor = ImageProcessor::new(tar_source);
+        let notifier = Notifier::new(0);
+        let processor = ImageProcessor::new(tar_source, notifier);
 
         // Process the image
-        processor.convert(FIXTURE_TAR_PATH, output_dir.path(), false)?;
+        processor.convert(FIXTURE_TAR_PATH, output_dir.path())?;
 
         // Verify our test files
         let expected_files = [
@@ -162,10 +165,11 @@ mod tests {
 
         let output_dir = TempDir::new()?;
         let tar_source = TarSource::new()?;
-        let processor = ImageProcessor::new(tar_source);
+        let notifier = Notifier::new(0);
+        let processor = ImageProcessor::new(tar_source, notifier);
 
         // Process the image
-        processor.convert(FIXTURE_TAR_PATH, output_dir.path(), false)?;
+        processor.convert(FIXTURE_TAR_PATH, output_dir.path())?;
 
         // Verify environment variables
         let expected_vars = ["APP_NAME", "APP_VERSION", "DEBUG"];
@@ -190,10 +194,11 @@ mod tests {
 
         let output_dir = TempDir::new()?;
         let tar_source = TarSource::new()?;
-        let processor = ImageProcessor::new(tar_source);
+        let notifier = Notifier::new(0);
+        let processor = ImageProcessor::new(tar_source, notifier);
 
         // Process the image
-        processor.convert(FIXTURE_TAR_PATH, output_dir.path(), false)?;
+        processor.convert(FIXTURE_TAR_PATH, output_dir.path())?;
 
         // Verify git structure
         verify_git_structure(output_dir.path())?;
