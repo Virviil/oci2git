@@ -85,13 +85,6 @@ impl<S: Source> ImageProcessor<S> {
 
         let repo = GitRepo::init_with_branch(output_dir, Some(&branch_name))?;
 
-        // First commit: Add Image.md with metadata
-        self.notifier.info("Creating metadata commit...");
-
-        let metadata_path = output_dir.join("Image.md");
-        metadata::generate_markdown_metadata(&metadata, &metadata_path)?;
-        repo.add_and_commit_file(&metadata_path, "🛠️ - Metadata")?;
-
         // Create the rootfs directory
         let rootfs_dir = output_dir.join("rootfs");
         fs::create_dir_all(&rootfs_dir)?;
@@ -137,7 +130,7 @@ impl<S: Source> ImageProcessor<S> {
                     layers.len(),
                     layer.command
                 ));
-                repo.create_empty_commit(&format!("Layer: {}", layer.command))?;
+                repo.commit_all_changes(&format!("Layer: {}", layer.command))?;
 
                 if i % 10 == 0 {
                     self.notifier.info(&format!(
@@ -147,6 +140,13 @@ impl<S: Source> ImageProcessor<S> {
                     ));
                 }
             }
+
+            // Final commit: Add Image.md with metadata
+            self.notifier.info("Creating metadata commit...");
+
+            let metadata_path = output_dir.join("Image.md");
+            metadata::generate_markdown_metadata(&metadata, &metadata_path)?;
+            repo.commit_all_changes("🛠️ - Metadata")?;
 
             self.notifier.info("Conversion completed successfully!");
 
@@ -251,7 +251,7 @@ impl<S: Source> ImageProcessor<S> {
                     "Creating empty commit for layer: {}",
                     layer.command
                 ));
-                repo.create_empty_commit(&commit_message)?;
+                repo.commit_all_changes(&commit_message)?;
                 continue;
             }
 
@@ -273,7 +273,7 @@ impl<S: Source> ImageProcessor<S> {
                     tarball_idx,
                     layer_tarballs.len() - 1
                 ));
-                repo.create_empty_commit(&format!("Layer (tarball not found): {}", layer.command))?;
+                repo.commit_all_changes(&format!("Layer (tarball not found): {}", layer.command))?;
                 continue;
             }
 
@@ -496,21 +496,17 @@ impl<S: Source> ImageProcessor<S> {
             self.notifier
                 .info(&format!("Committing layer {}/{}", i + 1, layers.len()));
 
-            let has_changes = repo.commit_all_changes(&format!("🟢 - {}", layer.command))?;
-
-            if !has_changes {
-                self.notifier.debug(&format!(
-                    "No changes detected for layer {}, creating empty commit",
-                    i
-                ));
-                repo.create_empty_commit(&format!(
-                    "Layer (no detected changes): {}",
-                    layer.command
-                ))?;
-            }
+            repo.commit_all_changes(&format!("🟢 - {}", layer.command))?;
         }
 
         // Ownership fixup removed - files will maintain their permissions from extraction
+
+        // Final commit: Add Image.md with metadata
+        self.notifier.info("Creating metadata commit...");
+
+        let metadata_path = output_dir.join("Image.md");
+        metadata::generate_markdown_metadata(&metadata, &metadata_path)?;
+        repo.commit_all_changes("🛠️ - Metadata")?;
 
         let msg = format!(
             "Successfully converted image '{}' to Git repository at '{}'",

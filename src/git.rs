@@ -1,20 +1,15 @@
 use anyhow::{Context, Result};
-use git2::{IndexAddOption, Repository, Signature};
-use std::path::{Path, PathBuf};
+use git2::{IndexAddOption, Oid, Repository, Signature};
+use std::path::Path;
 
 pub struct GitRepo {
     repo: Repository,
-    repo_path: PathBuf,
 }
 
 const USERNAME: &str = "oci2git";
 const EMAIL: &str = "oci2git@example.com";
 
 impl GitRepo {
-    pub fn init(path: &Path) -> Result<Self> {
-        Self::init_with_branch(path, None)
-    }
-
     pub fn init_with_branch(path: &Path, branch_name: Option<&str>) -> Result<Self> {
         let repo = Repository::init(path).context("Failed to initialize Git repository")?;
 
@@ -26,35 +21,31 @@ impl GitRepo {
             .set_str("user.email", EMAIL)
             .context("Failed to set git email")?;
 
-        let git_repo = Self {
-            repo,
-            repo_path: path.to_path_buf(),
-        };
+        let git_repo = Self { repo };
 
-        // Create the custom branch if specified
+        // Create the custom branch if specified (from beginning, no initial commit)
         if let Some(branch) = branch_name {
-            git_repo.create_branch(branch)?;
+            git_repo.create_branch(branch, None)?;
         }
 
         Ok(git_repo)
     }
 
-    pub fn create_branch(&self, branch_name: &str) -> Result<()> {
-        let signature =
-            Signature::now(USERNAME, EMAIL).context("Failed to create git signature")?;
+    pub fn create_branch(&self, branch_name: &str, from_commit: Option<&str>) -> Result<()> {
+        match from_commit {
+            Some(commit_id) => {
+                let commit_oid = Oid::from_str(commit_id).context("Invalid commit ID")?;
+                let target = self.repo.find_commit(commit_oid)?;
 
-        // Create an empty initial commit to establish the branch
-        let tree_id = self.repo.index()?.write_tree()?;
-        let tree = self.repo.find_tree(tree_id)?;
-
-        let _commit_id = self.repo.commit(
-            Some(&format!("refs/heads/{}", branch_name)),
-            &signature,
-            &signature,
-            "Initial commit",
-            &tree,
-            &[],
-        )?;
+                self.repo
+                    .branch(branch_name, &target, false)
+                    .context("Failed to create branch")?;
+            }
+            None => {
+                // Create orphaned branch by just setting HEAD to point to the new branch
+                // The branch will be created when the first commit is made
+            }
+        }
 
         // Set HEAD to point to the new branch
         self.repo
@@ -64,25 +55,28 @@ impl GitRepo {
         Ok(())
     }
 
-    pub fn create_empty_commit(&self, message: &str) -> Result<()> {
-        let signature = Signature::now("oci2git", "oci2git@example.com")
+    pub fn commit_all_changes(&self, message: &str) -> Result<bool> {
+        let signature = Signature::now(USERNAME, EMAIL)
             .context("Failed to create git signature")?;
 
-        let tree_id = self
-            .repo
-            .index()
-            .context("Failed to get git index")?
-            .write_tree()
-            .context("Failed to write git tree")?;
+        let mut index = self.repo.index().context("Failed to get git index")?;
 
+        index
+            .add_all(["*"].iter(), IndexAddOption::DEFAULT, None)
+            .context("Failed to add files to git index")?;
+
+        let has_changes = !index.is_empty();
+
+        index.write().context("Failed to write git index")?;
+        let tree_id = index.write_tree().context("Failed to write git tree")?;
         let tree = self
             .repo
             .find_tree(tree_id)
             .context("Failed to find git tree")?;
 
         let parent_commits = if let Ok(head) = self.repo.head() {
-            if let Some(oid) = head.target() {
-                vec![self.repo.find_commit(oid)?]
+            if let Ok(commit) = head.peel_to_commit() {
+                vec![commit]
             } else {
                 vec![]
             }
@@ -101,98 +95,9 @@ impl GitRepo {
                 &tree,
                 &parent_commits_refs,
             )
-            .context("Failed to create empty commit")?;
-
-        Ok(())
-    }
-
-    pub fn commit_all_changes(&self, message: &str) -> Result<bool> {
-        let signature = Signature::now("oci2git", "oci2git@example.com")
-            .context("Failed to create git signature")?;
-
-        let mut index = self.repo.index().context("Failed to get git index")?;
-
-        index
-            .add_all(["*"].iter(), IndexAddOption::DEFAULT, None)
-            .context("Failed to add files to git index")?;
-
-        if index.is_empty() {
-            return Ok(false);
-        }
-
-        index.write().context("Failed to write git index")?;
-        let tree_id = index.write_tree().context("Failed to write git tree")?;
-        let tree = self
-            .repo
-            .find_tree(tree_id)
-            .context("Failed to find git tree")?;
-
-        let parent_commit = self
-            .repo
-            .head()
-            .and_then(|head| head.peel_to_commit())
-            .context("Failed to get head commit")?;
-
-        self.repo
-            .commit(
-                Some("HEAD"),
-                &signature,
-                &signature,
-                message,
-                &tree,
-                &[&parent_commit],
-            )
             .context("Failed to create commit")?;
 
-        Ok(true)
-    }
-
-    pub fn add_and_commit_file(&self, file_path: &Path, message: &str) -> Result<()> {
-        let signature = Signature::now("oci2git", "oci2git@example.com")
-            .context("Failed to create git signature")?;
-
-        let mut index = self.repo.index().context("Failed to get git index")?;
-
-        let repo_path = self.repo_path.clone();
-        let relative_path = file_path
-            .strip_prefix(&repo_path)
-            .unwrap_or(file_path)
-            .to_str()
-            .context("Invalid file path")?;
-
-        index
-            .add_path(Path::new(relative_path))
-            .context(format!("Failed to add file {} to git index", relative_path))?;
-
-        index.write().context("Failed to write git index")?;
-        let tree_id = index.write_tree().context("Failed to write git tree")?;
-        let tree = self
-            .repo
-            .find_tree(tree_id)
-            .context("Failed to find git tree")?;
-
-        let parents = match self.repo.head() {
-            Ok(head) => {
-                let parent_commit = head.peel_to_commit().context("Failed to get head commit")?;
-                vec![parent_commit]
-            }
-            Err(_) => vec![],
-        };
-
-        let parent_refs: Vec<&git2::Commit> = parents.iter().collect();
-
-        self.repo
-            .commit(
-                Some("HEAD"),
-                &signature,
-                &signature,
-                message,
-                &tree,
-                &parent_refs,
-            )
-            .context("Failed to create commit")?;
-
-        Ok(())
+        Ok(has_changes)
     }
 
     // For testing purposes only - get commit count
@@ -225,7 +130,7 @@ mod tests {
     #[test]
     fn test_init_repo() {
         let temp_dir = tempdir().unwrap();
-        let result = GitRepo::init(temp_dir.path());
+        let result = GitRepo::init_with_branch(temp_dir.path(), Some("main"));
 
         assert!(result.is_ok());
 
@@ -242,17 +147,18 @@ mod tests {
     }
 
     #[test]
-    fn test_add_and_commit_file() {
+    fn test_commit_file() {
         let temp_dir = tempdir().unwrap();
-        let repo = GitRepo::init(temp_dir.path()).unwrap();
+        let repo = GitRepo::init_with_branch(temp_dir.path(), Some("main")).unwrap();
 
         // Create a test file
         let test_file_path = temp_dir.path().join("test.txt");
         fs::write(&test_file_path, "test content").unwrap();
 
-        // Commit the file
-        let result = repo.add_and_commit_file(&test_file_path, "Add test file");
+        // Commit all changes
+        let result = repo.commit_all_changes("Add test file");
         assert!(result.is_ok());
+        assert!(result.unwrap()); // Should return true for file changes
 
         // Check commit count
         assert_eq!(repo.get_commit_count().unwrap(), 1);
@@ -262,13 +168,14 @@ mod tests {
     }
 
     #[test]
-    fn test_create_empty_commit() {
+    fn test_empty_commit() {
         let temp_dir = tempdir().unwrap();
-        let repo = GitRepo::init(temp_dir.path()).unwrap();
+        let repo = GitRepo::init_with_branch(temp_dir.path(), Some("main")).unwrap();
 
         // Create an empty commit
-        let result = repo.create_empty_commit("Empty commit");
+        let result = repo.commit_all_changes("Empty commit");
         assert!(result.is_ok());
+        assert!(!result.unwrap()); // Should return false for no changes
 
         // Check commit count
         assert_eq!(repo.get_commit_count().unwrap(), 1);
@@ -277,8 +184,9 @@ mod tests {
         assert_eq!(repo.get_last_commit_message().unwrap(), "Empty commit");
 
         // Create another empty commit
-        let result = repo.create_empty_commit("Another empty commit");
+        let result = repo.commit_all_changes("Another empty commit");
         assert!(result.is_ok());
+        assert!(!result.unwrap()); // Should return false for no changes
 
         // Check commit count
         assert_eq!(repo.get_commit_count().unwrap(), 2);
@@ -293,13 +201,12 @@ mod tests {
     #[test]
     fn test_commit_all_changes() {
         let temp_dir = tempdir().unwrap();
-        let repo = GitRepo::init(temp_dir.path()).unwrap();
+        let repo = GitRepo::init_with_branch(temp_dir.path(), Some("main")).unwrap();
 
         // Create an initial commit
         let test_file_path = temp_dir.path().join("initial.txt");
         fs::write(&test_file_path, "initial content").unwrap();
-        repo.add_and_commit_file(&test_file_path, "Initial commit")
-            .unwrap();
+        repo.commit_all_changes("Initial commit").unwrap();
 
         // Create new files
         let file1_path = temp_dir.path().join("file1.txt");
@@ -354,13 +261,21 @@ mod tests {
             "oci2git@example.com"
         );
 
-        // Verify we're on the correct branch
+        // On an orphaned branch, we can't reliably check HEAD until after first commit
+        // So we'll just create a commit and then verify the branch
+
+        // Create a commit to establish the branch
+        let test_file = temp_dir.path().join("test.txt");
+        fs::write(&test_file, "test").unwrap();
+        repo.commit_all_changes("Test commit").unwrap();
+
+        // Now verify the branch is properly established
         let head = repo.repo.head().unwrap();
         let branch_ref = head.shorthand().unwrap();
         assert_eq!(branch_ref, branch_name);
+        assert!(head.target().is_some()); // Now has a commit
 
-        // Verify there's an initial commit
+        // Verify there's now one commit
         assert_eq!(repo.get_commit_count().unwrap(), 1);
-        assert_eq!(repo.get_last_commit_message().unwrap(), "Initial commit");
     }
 }
