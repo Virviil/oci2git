@@ -23,8 +23,8 @@ pub trait Source {
 
     /// Generates a Git branch name from the image name/path
     /// Each source type implements its own naming strategy
-    /// The image_digest parameter is mandatory and provided by the processor after extracting metadata
-    fn branch_name(&self, image_name: &str, image_digest: &str) -> String;
+    /// The os_arch and image_digest parameters are mandatory and provided by the processor after extracting metadata
+    fn branch_name(&self, image_name: &str, os_arch: &str, image_digest: &str) -> String;
 }
 
 #[cfg(test)]
@@ -34,26 +34,38 @@ mod tests {
 
     #[test]
     fn test_polymorphic_branch_naming() {
-        // Test Docker source - digest is always provided by processor
+        // Test Docker source - os_arch and digest are always provided by processor
         let docker_source = DockerSource::new().unwrap();
         assert_eq!(
-            docker_source.branch_name("hello-world:latest", "sha256:1234567890abcdef"),
-            "hello-world#latest#1234567890ab"
+            docker_source.branch_name(
+                "hello-world:latest",
+                "linux-amd64",
+                "sha256:1234567890abcdef"
+            ),
+            "hello-world#latest#linux-amd64#1234567890ab"
         );
         assert_eq!(
-            docker_source.branch_name("nginx/nginx:1.21", "sha256:9876543210fedcba"),
-            "nginx-nginx#1.21#9876543210fe"
+            docker_source.branch_name("nginx/nginx:1.21", "linux-arm64", "sha256:9876543210fedcba"),
+            "nginx-nginx#1.21#linux-arm64#9876543210fe"
         );
 
-        // Test Tar source - digest is always provided by processor
+        // Test Tar source - os_arch and digest are always provided by processor
         let tar_source = TarSource::new().unwrap();
         assert_eq!(
-            tar_source.branch_name("/path/to/my-image.tar", "sha256:1234567890abcdef"),
-            "my-image#1234567890ab"
+            tar_source.branch_name(
+                "/path/to/my-image.tar",
+                "linux-amd64",
+                "sha256:1234567890abcdef"
+            ),
+            "my-image#linux-amd64#1234567890ab"
         );
         assert_eq!(
-            tar_source.branch_name("ubuntu 20.04.tar", "sha256:abcdef123456789"),
-            "ubuntu-20-04#abcdef123456"
+            tar_source.branch_name(
+                "ubuntu 20.04.tar",
+                "windows-amd64",
+                "sha256:abcdef123456789"
+            ),
+            "ubuntu-20-04#windows-amd64#abcdef123456"
         );
     }
 }

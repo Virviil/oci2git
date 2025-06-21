@@ -66,13 +66,13 @@ impl Source for TarSource {
         Ok((tarball_path, None))
     }
 
-    fn branch_name(&self, image_path: &str, image_digest: &str) -> String {
+    fn branch_name(&self, image_path: &str, os_arch: &str, image_digest: &str) -> String {
         let base_branch = tar_to_branch(image_path);
         if let Some(short_digest) = super::extract_short_digest(image_digest) {
-            format!("{}#{}", base_branch, short_digest)
+            format!("{}#{}#{}", base_branch, os_arch, short_digest)
         } else {
             // Fallback: use image_digest as-is if it doesn't have sha256: prefix
-            format!("{}#{}", base_branch, image_digest)
+            format!("{}#{}#{}", base_branch, os_arch, image_digest)
         }
     }
 }
@@ -98,21 +98,29 @@ mod tests {
     fn test_tar_source_branch_name() {
         let source = TarSource::new().unwrap();
         assert_eq!(
-            source.branch_name("/path/to/my-image.tar", "sha256:1234567890abcdef"),
-            "my-image#1234567890ab"
+            source.branch_name(
+                "/path/to/my-image.tar",
+                "linux-amd64",
+                "sha256:1234567890abcdef"
+            ),
+            "my-image#linux-amd64#1234567890ab"
         );
         assert_eq!(
-            source.branch_name("nginx-latest.tar", "sha256:9876543210fedcba"),
-            "nginx-latest#9876543210fe"
+            source.branch_name("nginx-latest.tar", "linux-arm64", "sha256:9876543210fedcba"),
+            "nginx-latest#linux-arm64#9876543210fe"
         );
         assert_eq!(
-            source.branch_name("ubuntu 20.04.tar", "sha256:abcdef123456789"),
-            "ubuntu-20-04#abcdef123456"
+            source.branch_name(
+                "ubuntu 20.04.tar",
+                "windows-amd64",
+                "sha256:abcdef123456789"
+            ),
+            "ubuntu-20-04#windows-amd64#abcdef123456"
         );
         // Test fallback for digest without sha256: prefix
         assert_eq!(
-            source.branch_name("ubuntu 20.04.tar", "abcdef123456789"),
-            "ubuntu-20-04#abcdef123456789"
+            source.branch_name("ubuntu 20.04.tar", "linux-amd64", "abcdef123456789"),
+            "ubuntu-20-04#linux-amd64#abcdef123456789"
         );
     }
 }

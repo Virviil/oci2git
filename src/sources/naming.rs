@@ -28,14 +28,14 @@ pub fn tar_path_to_branch(tar_path: &str) -> String {
     super::sanitize_branch_name(filename)
 }
 
-/// Combines a base branch name with a digest to create the final branch name
+/// Combines a base branch name with os-arch and a digest to create the final branch name
 /// Extracts short digest (first 12 characters after "sha256:")
-pub fn combine_branch_with_digest(base_branch: &str, image_digest: &str) -> String {
+pub fn combine_branch_with_digest(base_branch: &str, os_arch: &str, image_digest: &str) -> String {
     if let Some(short_digest) = super::extract_short_digest(image_digest) {
-        format!("{}#{}", base_branch, short_digest)
+        format!("{}#{}#{}", base_branch, os_arch, short_digest)
     } else {
         // Fallback: use image_digest as-is if it doesn't have sha256: prefix
-        format!("{}#{}", base_branch, image_digest)
+        format!("{}#{}#{}", base_branch, os_arch, image_digest)
     }
 }
 
@@ -99,18 +99,22 @@ mod tests {
     fn test_combine_branch_with_digest() {
         // Test with proper SHA256 prefix
         assert_eq!(
-            combine_branch_with_digest("hello-world#latest", "sha256:1234567890abcdef"),
-            "hello-world#latest#1234567890ab"
+            combine_branch_with_digest(
+                "hello-world#latest",
+                "linux-amd64",
+                "sha256:1234567890abcdef"
+            ),
+            "hello-world#latest#linux-amd64#1234567890ab"
         );
         assert_eq!(
-            combine_branch_with_digest("nginx#1.21", "sha256:9876543210fedcba"),
-            "nginx#1.21#9876543210fe"
+            combine_branch_with_digest("nginx#1.21", "linux-arm64", "sha256:9876543210fedcba"),
+            "nginx#1.21#linux-arm64#9876543210fe"
         );
 
         // Test fallback without SHA256 prefix
         assert_eq!(
-            combine_branch_with_digest("my-image", "abcdef123456789"),
-            "my-image#abcdef123456789"
+            combine_branch_with_digest("my-image", "windows-amd64", "abcdef123456789"),
+            "my-image#windows-amd64#abcdef123456789"
         );
     }
 }
