@@ -65,11 +65,9 @@ impl ExtractedImage {
         })
     }
 
-    pub fn metadata(&self, image_name: &str) -> Result<ImageMetadata> {
-        // Override the image name with the provided one
-        let mut metadata = self.metadata.clone();
-        metadata.id = image_name.to_string();
-        Ok(metadata)
+    pub fn metadata(&self, _image_name: &str) -> Result<ImageMetadata> {
+        // Return the metadata as-is, keeping the proper SHA digest as ID
+        Ok(self.metadata.clone())
     }
 
     pub fn os(&self, image_name: &str) -> Result<String> {
