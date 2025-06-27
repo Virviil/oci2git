@@ -118,9 +118,6 @@ impl<S: Source> ImageProcessor<S> {
         // Create the branch from the optimal point
         repo.create_branch(&branch_name, start_from_commit)?;
 
-        // Path for saving digest tracker
-        let digest_path = output_dir.join("digests.json");
-
         // Create the rootfs directory
         let rootfs_dir = output_dir.join("rootfs");
         fs::create_dir_all(&rootfs_dir)?;
@@ -161,12 +158,18 @@ impl<S: Source> ImageProcessor<S> {
 
         // Initialize digest tracker for new commits
         let mut new_digest_tracker = if let Some(start_commit) = start_from_commit {
-            // Load existing digest tracker from the start commit
-            match repo.read_file_from_commit(start_commit, "digests.json") {
-                Ok(content) => serde_json::from_str(&content)
-                    .context("Failed to parse existing digests.json")?,
+            // Load existing digest tracker from the start commit Image.md
+            match repo.read_file_from_commit(start_commit, "Image.md") {
+                Ok(content) => {
+                    let image_metadata =
+                        crate::image_metadata::ImageMetadata::parse_markdown(&content)
+                            .context("Failed to parse existing Image.md")?;
+                    DigestTracker {
+                        layer_digests: image_metadata.layer_digests,
+                    }
+                }
                 Err(_) => {
-                    // No digests.json in the start commit, create new tracker
+                    // No Image.md in the start commit, create new tracker
                     DigestTracker::new()
                 }
             }
@@ -225,9 +228,6 @@ impl<S: Source> ImageProcessor<S> {
                     layer.is_empty,
                     layer.comment.clone(),
                 );
-
-                // Save digest tracker before commit so it's included in the commit
-                new_digest_tracker.save_to_file(&digest_path)?;
 
                 // Update structured metadata with current layer digests and save Image.md
                 structured_metadata.update_layer_digests(&new_digest_tracker);
@@ -449,9 +449,6 @@ impl<S: Source> ImageProcessor<S> {
                 false,
                 layer.comment.clone(),
             );
-
-            // Save digest tracker before commit so it's included in the commit
-            new_digest_tracker.save_to_file(&digest_path)?;
 
             // Update structured metadata with current layer digests and save Image.md
             structured_metadata.update_layer_digests(&new_digest_tracker);

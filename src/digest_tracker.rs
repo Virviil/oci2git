@@ -32,17 +32,13 @@ impl DigestTracker {
             return Ok(Self::new());
         }
 
-        let content = fs::read_to_string(path).context("Failed to read digests.json")?;
-        let tracker: DigestTracker =
-            serde_json::from_str(&content).context("Failed to parse digests.json")?;
+        let content = fs::read_to_string(path).context("Failed to read Image.md")?;
+        let image_metadata = crate::image_metadata::ImageMetadata::parse_markdown(&content)
+            .context("Failed to parse Image.md")?;
+        let tracker = Self {
+            layer_digests: image_metadata.layer_digests,
+        };
         Ok(tracker)
-    }
-
-    pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let path = path.as_ref();
-        let content = serde_json::to_string_pretty(self).context("Failed to serialize digests")?;
-        fs::write(path, content).context("Failed to write digests.json")?;
-        Ok(())
     }
 
     pub fn add_layer(
@@ -193,30 +189,34 @@ mod tests {
     }
 
     #[test]
-    fn test_save_and_load() {
+    fn test_load_from_image_md() {
         let temp_dir = tempdir().unwrap();
-        let digest_path = temp_dir.path().join("digests.json");
+        let image_md_path = temp_dir.path().join("Image.md");
 
-        let mut tracker = DigestTracker::new();
-        tracker.add_layer(
-            0,
-            "sha256:abc123".to_string(),
-            "FROM alpine".to_string(),
-            "2023-01-01T00:00:00Z".to_string(),
-            false,
-            None,
-        );
+        // Create a sample Image.md with layer history
+        let image_md_content = r#"# Image: test:latest
 
-        // Save
-        tracker.save_to_file(&digest_path).unwrap();
-        assert!(digest_path.exists());
+## Basic Information
+
+- **Name**: test:latest
+- **ID**: `sha256:test123`
+
+## Layer History
+
+| Created | Command | Comment | Digest | Empty |
+|---------|---------|---------|--------|-------|
+| 2023-01-01T00:00:00Z | `FROM alpine` | buildkit.dockerfile.v0 | `sha256:abc123` | false |
+"#;
+        std::fs::write(&image_md_path, image_md_content).unwrap();
 
         // Load
-        let loaded_tracker = DigestTracker::load_from_file(&digest_path).unwrap();
+        let loaded_tracker = DigestTracker::load_from_file(&image_md_path).unwrap();
         assert_eq!(loaded_tracker.layer_digests.len(), 1);
 
         let layer = loaded_tracker.get_layer(0).unwrap();
         assert_eq!(layer.digest, "sha256:abc123");
+        assert_eq!(layer.command, "FROM alpine");
+        assert!(!layer.is_empty);
     }
 
     #[test]

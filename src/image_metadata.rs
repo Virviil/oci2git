@@ -189,7 +189,7 @@ impl ImageMetadata {
                 // Escape pipes in the content for proper markdown display
                 let escaped_command = layer.command.replace("|", "\\|");
                 let escaped_comment = comment.replace("|", "\\|");
-                
+
                 markdown.push_str(&format!(
                     "| {} | `{}` | {} | `{}` | {} |\n",
                     layer.created, escaped_command, escaped_comment, layer.digest, layer.is_empty
@@ -335,12 +335,12 @@ impl ImageMetadata {
                     && !lines[i].trim().is_empty()
                 {
                     let line_content = lines[i];
-                    
+
                     // Find unescaped pipe positions using regex approach
                     // Look for pipes that are either at start or not preceded by backslash
                     let mut unescaped_pipe_positions = Vec::new();
                     let chars: Vec<char> = line_content.chars().collect();
-                    
+
                     for (pos, &ch) in chars.iter().enumerate() {
                         if ch == '|' {
                             // Pipe is unescaped if it's at the start or not preceded by backslash
@@ -349,7 +349,7 @@ impl ImageMetadata {
                             }
                         }
                     }
-                    
+
                     // Split by unescaped pipe positions
                     let mut parts = Vec::new();
                     let mut start = 0;
@@ -360,7 +360,7 @@ impl ImageMetadata {
                     if start < line_content.len() {
                         parts.push(&line_content[start..]);
                     }
-                    
+
                     if parts.len() >= 6 {
                         let created = parts[1].trim().to_string();
                         let command = parts[2].trim().replace("`", "").replace("\\|", "|");
@@ -589,7 +589,8 @@ mod tests {
         // Test with real data from alp/Image.md that contains complex commands with pipes
         let basic_info = BasicInfo {
             name: "postgres:16.9-alpine3.21".to_string(),
-            id: "sha256:48ae07b5a3dfabc83a914aec99d42d083677f57853398ac14c5f25884da09f14".to_string(),
+            id: "sha256:48ae07b5a3dfabc83a914aec99d42d083677f57853398ac14c5f25884da09f14"
+                .to_string(),
             tags: vec!["postgres:16.9-alpine3.21".to_string()],
             created: "2025-06-06T18:27:47Z".to_string(),
             architecture: "arm64".to_string(),
@@ -652,7 +653,7 @@ mod tests {
 
         // Test the round-trip: render to markdown, then parse back
         let rendered_markdown = original_metadata.render_markdown().unwrap();
-        
+
         // Verify that pipes are properly escaped in the rendered markdown
         assert!(rendered_markdown.contains("dpkg --print-architecture \\| awk"));
         assert!(rendered_markdown.contains("sha256sum -c -"));
@@ -660,27 +661,64 @@ mod tests {
         assert!(rendered_markdown.contains("\\| sort -u"));
         assert!(rendered_markdown.contains("\\| awk 'system"));
         assert!(rendered_markdown.contains("\\| grep -v"));
-        
+
         // Parse the markdown back to metadata
         let parsed_metadata = ImageMetadata::parse_markdown(&rendered_markdown).unwrap();
-        
+
         // Verify basic info
-        assert_eq!(parsed_metadata.basic_info.as_ref().unwrap().name, original_metadata.basic_info.as_ref().unwrap().name);
-        assert_eq!(parsed_metadata.basic_info.as_ref().unwrap().id, original_metadata.basic_info.as_ref().unwrap().id);
-        assert_eq!(parsed_metadata.basic_info.as_ref().unwrap().architecture, original_metadata.basic_info.as_ref().unwrap().architecture);
-        
+        assert_eq!(
+            parsed_metadata.basic_info.as_ref().unwrap().name,
+            original_metadata.basic_info.as_ref().unwrap().name
+        );
+        assert_eq!(
+            parsed_metadata.basic_info.as_ref().unwrap().id,
+            original_metadata.basic_info.as_ref().unwrap().id
+        );
+        assert_eq!(
+            parsed_metadata.basic_info.as_ref().unwrap().architecture,
+            original_metadata.basic_info.as_ref().unwrap().architecture
+        );
+
         // Verify layer digests count
-        assert_eq!(parsed_metadata.layer_digests.len(), original_metadata.layer_digests.len());
-        
+        assert_eq!(
+            parsed_metadata.layer_digests.len(),
+            original_metadata.layer_digests.len()
+        );
+
         // Verify each layer digest matches exactly, especially the complex commands with pipes
-        for (i, (original, parsed)) in original_metadata.layer_digests.iter().zip(parsed_metadata.layer_digests.iter()).enumerate() {
-            assert_eq!(parsed.digest, original.digest, "Layer {} digest mismatch", i);
-            assert_eq!(parsed.command, original.command, "Layer {} command mismatch", i);
-            assert_eq!(parsed.created, original.created, "Layer {} created mismatch", i);
-            assert_eq!(parsed.is_empty, original.is_empty, "Layer {} empty flag mismatch", i);
-            assert_eq!(parsed.comment, original.comment, "Layer {} comment mismatch", i);
+        for (i, (original, parsed)) in original_metadata
+            .layer_digests
+            .iter()
+            .zip(parsed_metadata.layer_digests.iter())
+            .enumerate()
+        {
+            assert_eq!(
+                parsed.digest, original.digest,
+                "Layer {} digest mismatch",
+                i
+            );
+            assert_eq!(
+                parsed.command, original.command,
+                "Layer {} command mismatch",
+                i
+            );
+            assert_eq!(
+                parsed.created, original.created,
+                "Layer {} created mismatch",
+                i
+            );
+            assert_eq!(
+                parsed.is_empty, original.is_empty,
+                "Layer {} empty flag mismatch",
+                i
+            );
+            assert_eq!(
+                parsed.comment, original.comment,
+                "Layer {} comment mismatch",
+                i
+            );
         }
-        
+
         // Specifically test the complex command with multiple pipes
         let complex_layer = &parsed_metadata.layer_digests[2]; // The postgresql build command
         assert!(complex_layer.command.contains("| sha256sum -c -"));
@@ -688,9 +726,13 @@ mod tests {
         assert!(complex_layer.command.contains("| sort -u"));
         assert!(complex_layer.command.contains("| awk 'system"));
         assert!(complex_layer.command.contains("| grep -v"));
-        
+
         // Ensure no escaped pipes remain in the parsed content
         assert!(!complex_layer.command.contains("\\|"));
-        assert!(!complex_layer.comment.as_ref().unwrap_or(&String::new()).contains("\\|"));
+        assert!(!complex_layer
+            .comment
+            .as_ref()
+            .unwrap_or(&String::new())
+            .contains("\\|"));
     }
 }
