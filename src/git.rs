@@ -424,7 +424,7 @@ mod tests {
         assert_eq!(repo.get_commit_count().unwrap(), 1);
     }
 
-    #[test] 
+    #[test]
     fn test_branch_exists() {
         let temp_dir = tempdir().unwrap();
         let repo = GitRepo::init_with_branch(temp_dir.path(), Some("main")).unwrap();

@@ -34,8 +34,8 @@ fn test_extracted_image_eager_loading() {
     );
     assert!(!metadata.os.is_empty(), "OS should be set");
     assert_eq!(
-        metadata.id, "test-image",
-        "Image ID should match provided name"
+        metadata.id, "sha256:9a44f1c8a8d457adcbd2e389c0cb2968a35d19898c1fe22086521fc8b2082ab0",
+        "Image ID should match provided sha256 hash"
     );
 
     // Test that layers are immediately available (no lazy loading)
@@ -164,8 +164,14 @@ fn test_extracted_image_multiple_calls() {
     // Metadata should be consistent (except for overridden image name)
     assert_eq!(metadata1.architecture, metadata2.architecture);
     assert_eq!(metadata1.os, metadata2.os);
-    assert_eq!(metadata1.id, "test1");
-    assert_eq!(metadata2.id, "test2");
+    assert_eq!(
+        metadata1.id,
+        "sha256:9a44f1c8a8d457adcbd2e389c0cb2968a35d19898c1fe22086521fc8b2082ab0"
+    );
+    assert_eq!(
+        metadata2.id,
+        "sha256:9a44f1c8a8d457adcbd2e389c0cb2968a35d19898c1fe22086521fc8b2082ab0"
+    );
 
     // Layers should be identical
     assert_eq!(layers1.len(), layers2.len());

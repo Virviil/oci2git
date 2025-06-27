@@ -74,16 +74,18 @@ impl SuccessorNavigator {
         Ok(digest_tracker.layer_matches(layer_position, expected_layer))
     }
 
-    /// Read digests.json content from a specific commit
+    /// Read digest info from Image.md content from a specific commit
     fn read_digests_from_commit(repo: &GitRepo, commit_oid: git2::Oid) -> Result<DigestTracker> {
-        match repo.read_file_from_commit(commit_oid, "digests.json") {
+        match repo.read_file_from_commit(commit_oid, "Image.md") {
             Ok(content) => {
-                let tracker: DigestTracker = serde_json::from_str(&content)
-                    .context("Failed to parse digests.json from commit")?;
-                Ok(tracker)
+                let image_metadata = crate::image_metadata::ImageMetadata::parse_markdown(&content)
+                    .context("Failed to parse Image.md from commit")?;
+                Ok(DigestTracker {
+                    layer_digests: image_metadata.layer_digests,
+                })
             }
             Err(_) => {
-                // No digests.json in this commit, return empty tracker
+                // No Image.md in this commit, return empty tracker
                 Ok(DigestTracker::new())
             }
         }

@@ -1,6 +1,7 @@
 pub mod digest_tracker;
 pub mod extracted_image;
 pub mod git;
+pub mod image_metadata;
 pub mod metadata;
 pub mod notifier;
 pub mod processor;
