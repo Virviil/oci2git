@@ -105,6 +105,16 @@ impl<S: Source> ImageProcessor<S> {
             (None, 0)
         };
 
+        // Check if this is a duplicate image - if branch exists and we're skipping all layers,
+        // it means we're processing the exact same image again
+        if repo.branch_exists(&branch_name) && skip_layers == layers.len() {
+            self.notifier.info(&format!(
+                "Image '{}' already exists as branch '{}' with identical content. Skipping duplicate processing.",
+                image_name, branch_name
+            ));
+            return Ok(());
+        }
+
         // Create the branch from the optimal point
         repo.create_branch(&branch_name, start_from_commit)?;
 
