@@ -1,7 +1,7 @@
 use crate::digest_tracker::DigestTracker;
 use crate::extracted_image::ExtractedImage;
 use crate::git::GitRepo;
-use crate::metadata;
+use crate::image_metadata::ImageMetadata;
 use crate::notifier::Notifier;
 use crate::sources::Source;
 use crate::successor_navigator::SuccessorNavigator;
@@ -175,6 +175,10 @@ impl<S: Source> ImageProcessor<S> {
             DigestTracker::new()
         };
 
+        // Initialize structured image metadata with only layer data (no basic_info or container_config until final commit)
+        let mut structured_metadata = ImageMetadata::new(None, None);
+        structured_metadata.update_layer_digests(&new_digest_tracker);
+
         // Now process layers starting from the first unmatched layer
         let layers_to_process = layers.len() - skip_layers;
         self.notifier.info(&format!(
@@ -224,6 +228,11 @@ impl<S: Source> ImageProcessor<S> {
 
                 // Save digest tracker before commit so it's included in the commit
                 new_digest_tracker.save_to_file(&digest_path)?;
+
+                // Update structured metadata with current layer digests and save Image.md
+                structured_metadata.update_layer_digests(&new_digest_tracker);
+                let metadata_path = output_dir.join("Image.md");
+                structured_metadata.save_markdown(&metadata_path)?;
 
                 self.notifier.debug(&format!(
                     "Creating empty commit for layer: {}",
@@ -444,6 +453,11 @@ impl<S: Source> ImageProcessor<S> {
             // Save digest tracker before commit so it's included in the commit
             new_digest_tracker.save_to_file(&digest_path)?;
 
+            // Update structured metadata with current layer digests and save Image.md
+            structured_metadata.update_layer_digests(&new_digest_tracker);
+            let metadata_path = output_dir.join("Image.md");
+            structured_metadata.save_markdown(&metadata_path)?;
+
             // Commit the changes for this layer
             self.notifier
                 .info(&format!("Committing layer {}/{}", i + 1, layers.len()));
@@ -453,11 +467,14 @@ impl<S: Source> ImageProcessor<S> {
 
         // Ownership fixup removed - files will maintain their permissions from extraction
 
-        // Final commit: Add Image.md with metadata and digests.json
+        // Final commit: Add Image.md with complete metadata (basic_info + container_config + layer digests)
         self.notifier.info("Creating metadata commit...");
 
+        // Create complete structured metadata with all information for final commit
+        let complete_metadata =
+            ImageMetadata::from_legacy(&metadata, &new_digest_tracker, image_name);
         let metadata_path = output_dir.join("Image.md");
-        metadata::generate_markdown_metadata(&metadata, &metadata_path)?;
+        complete_metadata.save_markdown(&metadata_path)?;
         repo.commit_all_changes("🛠️ - Metadata")?;
 
         let msg = format!(
