@@ -68,6 +68,7 @@ OCI2Git automatically detects shared layers between images and creates a branchi
 - A common trunk containing all shared layers
 - Separate branches that diverge only when the images actually differ
 - Clear visualization of where images share common ancestry vs. where they become unique
+- Smart duplicate handling: if the exact same image is processed twice, the algorithm detects this before the final metadata commit and skips creating a duplicate branch
 
 This approach is particularly valuable for:
 - **Image Family Analysis**: Understanding how different variants of an image (different versions, architectures, or configurations) relate to each other

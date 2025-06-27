@@ -156,6 +156,13 @@ impl GitRepo {
         Ok(branch_names)
     }
 
+    /// Check if a branch with the given name exists
+    pub fn branch_exists(&self, branch_name: &str) -> bool {
+        self.repo
+            .find_branch(branch_name, git2::BranchType::Local)
+            .is_ok()
+    }
+
     /// Check if the repository already exists and has commits
     pub fn exists_and_has_commits(&self) -> bool {
         if let Ok(branches) = self.get_all_branches() {
@@ -415,5 +422,25 @@ mod tests {
 
         // Verify there's now one commit
         assert_eq!(repo.get_commit_count().unwrap(), 1);
+    }
+
+    #[test] 
+    fn test_branch_exists() {
+        let temp_dir = tempdir().unwrap();
+        let repo = GitRepo::init_with_branch(temp_dir.path(), Some("main")).unwrap();
+
+        // Branch should not exist before creating it with a commit
+        assert!(!repo.branch_exists("main"));
+
+        // Create a commit to establish the branch
+        let test_file = temp_dir.path().join("test.txt");
+        fs::write(&test_file, "test").unwrap();
+        repo.commit_all_changes("Test commit").unwrap();
+
+        // Now the branch should exist
+        assert!(repo.branch_exists("main"));
+
+        // Non-existent branch should return false
+        assert!(!repo.branch_exists("non-existent-branch"));
     }
 }
