@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use git2::{IndexAddOption, Oid, Repository, Signature};
+use git2::{IndexAddOption, Repository, Signature};
 use std::path::Path;
 
 pub struct GitRepo {
@@ -10,8 +10,14 @@ const USERNAME: &str = "oci2git";
 const EMAIL: &str = "oci2git@example.com";
 
 impl GitRepo {
+    /// Initialize a new repository or open an existing one
     pub fn init_with_branch(path: &Path, branch_name: Option<&str>) -> Result<Self> {
-        let repo = Repository::init(path).context("Failed to initialize Git repository")?;
+        // Try to open existing repo first, then init if it doesn't exist
+        let repo = if path.join(".git").exists() {
+            Repository::open(path).context("Failed to open existing Git repository")?
+        } else {
+            Repository::init(path).context("Failed to initialize Git repository")?
+        };
 
         let mut config = repo.config().context("Failed to get git config")?;
         config
@@ -31,26 +37,37 @@ impl GitRepo {
         Ok(git_repo)
     }
 
-    pub fn create_branch(&self, branch_name: &str, from_commit: Option<&str>) -> Result<()> {
+    pub fn create_branch(&self, branch_name: &str, from_commit: Option<git2::Oid>) -> Result<()> {
         match from_commit {
-            Some(commit_id) => {
-                let commit_oid = Oid::from_str(commit_id).context("Invalid commit ID")?;
+            Some(commit_oid) => {
                 let target = self.repo.find_commit(commit_oid)?;
 
                 self.repo
                     .branch(branch_name, &target, false)
                     .context("Failed to create branch")?;
+
+                // Set HEAD to point to the new branch
+                self.repo
+                    .set_head(&format!("refs/heads/{}", branch_name))
+                    .context("Failed to set HEAD to new branch")?;
+
+                // Hard reset working directory to match the target commit
+                self.repo
+                    .reset(
+                        target.as_object(),
+                        git2::ResetType::Hard,
+                        Some(&mut git2::build::CheckoutBuilder::default()),
+                    )
+                    .context("Failed to reset working directory to branch point")?;
             }
             None => {
                 // Create orphaned branch by just setting HEAD to point to the new branch
                 // The branch will be created when the first commit is made
+                self.repo
+                    .set_head(&format!("refs/heads/{}", branch_name))
+                    .context("Failed to set HEAD to new branch")?;
             }
         }
-
-        // Set HEAD to point to the new branch
-        self.repo
-            .set_head(&format!("refs/heads/{}", branch_name))
-            .context("Failed to set HEAD to new branch")?;
 
         Ok(())
     }
@@ -100,6 +117,54 @@ impl GitRepo {
         Ok(has_changes)
     }
 
+    /// Get all commits from a specific branch (oldest to newest)
+    pub fn get_branch_commits(&self, branch_name: &str) -> Result<Vec<git2::Oid>> {
+        let branch = self
+            .repo
+            .find_branch(branch_name, git2::BranchType::Local)
+            .context("Failed to find branch")?;
+
+        let target = branch
+            .get()
+            .target()
+            .ok_or_else(|| anyhow::anyhow!("Branch has no target commit"))?;
+
+        let mut revwalk = self.repo.revwalk().context("Failed to create revwalk")?;
+        revwalk
+            .push(target)
+            .context("Failed to push branch target to revwalk")?;
+
+        let commits: Result<Vec<_>, _> = revwalk.collect();
+        let commits = commits.context("Failed to collect commits")?;
+
+        // Reverse to get oldest to newest
+        Ok(commits.into_iter().rev().collect())
+    }
+
+    /// Get all local branch names
+    pub fn get_all_branches(&self) -> Result<Vec<String>> {
+        let branches = self.repo.branches(Some(git2::BranchType::Local))?;
+        let mut branch_names = Vec::new();
+
+        for branch_result in branches {
+            let (branch, _) = branch_result.context("Failed to get branch")?;
+            if let Some(name) = branch.name().context("Failed to get branch name")? {
+                branch_names.push(name.to_string());
+            }
+        }
+
+        Ok(branch_names)
+    }
+
+    /// Check if the repository already exists and has commits
+    pub fn exists_and_has_commits(&self) -> bool {
+        if let Ok(branches) = self.get_all_branches() {
+            !branches.is_empty()
+        } else {
+            false
+        }
+    }
+
     // For testing purposes only - get commit count
     #[cfg(test)]
     pub fn get_commit_count(&self) -> Result<usize> {
@@ -118,6 +183,79 @@ impl GitRepo {
             .peel_to_commit()
             .context("Failed to get commit from HEAD")?;
         Ok(commit.message().unwrap_or("").to_string())
+    }
+
+    /// Read a file from a specific commit
+    pub fn read_file_from_commit(&self, commit_oid: git2::Oid, file_path: &str) -> Result<String> {
+        // Get the commit object
+        let commit = self
+            .repo
+            .find_commit(commit_oid)
+            .context("Failed to find commit")?;
+
+        // Get the tree from the commit
+        let tree = commit.tree().context("Failed to get tree from commit")?;
+
+        // Look for the file in the tree
+        let entry = tree.get_name(file_path);
+        match entry {
+            Some(entry) => {
+                // Get the blob content
+                let blob = self
+                    .repo
+                    .find_blob(entry.id())
+                    .context("Failed to find file blob")?;
+
+                // Convert to string
+                let content =
+                    std::str::from_utf8(blob.content()).context("File contains invalid UTF-8")?;
+
+                Ok(content.to_string())
+            }
+            None => {
+                // File doesn't exist in this commit
+                Err(anyhow::anyhow!("File '{}' not found in commit", file_path))
+            }
+        }
+    }
+
+    /// Get all commits that are successors to the given commit across all branches
+    /// If commit_oid is None, returns all commits without parents (root commits)
+    pub fn get_commit_successors(&self, commit_oid: Option<git2::Oid>) -> Result<Vec<git2::Oid>> {
+        let mut successors = Vec::new();
+        let branches = self.get_all_branches()?;
+
+        match commit_oid {
+            Some(target_commit) => {
+                // Check all branches for commits that have this commit as parent
+                for branch_name in branches {
+                    if let Ok(commits) = self.get_branch_commits(&branch_name) {
+                        for (i, &current_commit) in commits.iter().enumerate() {
+                            if current_commit == target_commit && i + 1 < commits.len() {
+                                // Found our commit, add the next commit as successor
+                                successors.push(commits[i + 1]);
+                            }
+                        }
+                    }
+                }
+            }
+            None => {
+                // Return all commits without parents (root commits)
+                for branch_name in branches {
+                    if let Ok(commits) = self.get_branch_commits(&branch_name) {
+                        if let Some(&root_commit) = commits.first() {
+                            successors.push(root_commit);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Remove duplicates
+        successors.sort();
+        successors.dedup();
+
+        Ok(successors)
     }
 }
 
