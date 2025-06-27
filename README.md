@@ -52,6 +52,30 @@ Sometimes the most insightful comparisons come from examining changes across mul
 By using `git checkout` to move to any specific commit, you can examine the container filesystem exactly as it existed at that layer. This allows developers to inspect the precise state of files and directories at any point in the image's creation process, providing invaluable context when debugging or examining container behavior.
 ![Checkout to previous commit](./assets/checkout.png)
 
+### Multi-Image Analysis
+
+When working with multiple container images that share common ancestry, OCI2Git intelligently creates branches only when the images actually diverge. This allows you to analyze multiple related images in a single repository while preserving their common history.
+
+```bash
+# Convert first image to create the base repository
+oci2git postgres:16.9-alpine3.21 -o alp
+
+# Convert second image to the same output folder
+oci2git nginx:1.28.0-alpine-slim -o alp
+```
+
+OCI2Git automatically detects shared layers between images and creates a branching structure that reflects their common base. The Git history will show:
+- A common trunk containing all shared layers
+- Separate branches that diverge only when the images actually differ
+- Clear visualization of where images share common ancestry vs. where they become unique
+
+This approach is particularly valuable for:
+- **Image Family Analysis**: Understanding how different variants of an image (different versions, architectures, or configurations) relate to each other
+- **Base Image Impact**: Seeing exactly how changes to a base image affect multiple derived images
+- **Optimization Opportunities**: Identifying shared components that could be better leveraged across image variants
+
+![Multi-image repository structure showing shared base and diverging branches](./assets/multiimage.png)
+
 ### Additional Use Cases
 
 - **Security Auditing**: Identify exactly when vulnerable packages or configurations were introduced and trace them back to specific build instructions.
