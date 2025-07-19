@@ -2,11 +2,10 @@ use crate::metadata::{self, ImageMetadata};
 use crate::notifier::Notifier;
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
-use flate2::read::GzDecoder;
 use std::fs::{self, File};
-use std::io::{BufReader, Read};
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use tar::Archive;
+use std::process::Command;
 
 #[derive(Debug, Clone)]
 pub struct Layer {
@@ -102,23 +101,30 @@ impl ExtractedImage {
         let mut magic_bytes = [0u8; 2];
         file_for_detection.read_exact(&mut magic_bytes)?;
 
+        let mut cmd = Command::new("tar");
+
         if magic_bytes == [0x1f, 0x8b] {
             // This is a gzip file
-            let file = File::open(tar_path)?;
-            let reader = BufReader::new(file);
-            let decoder = GzDecoder::new(reader);
-            let mut archive = Archive::new(decoder);
-            archive
-                .unpack(extract_dir)
-                .context(format!("Failed to extract gzip tar file: {:?}", tar_path))?;
+            cmd.arg("-xzf");
         } else {
             // This is a plain tar file
-            let file = File::open(tar_path)?;
-            let reader = BufReader::new(file);
-            let mut archive = Archive::new(reader);
-            archive
-                .unpack(extract_dir)
-                .context(format!("Failed to extract tar file: {:?}", tar_path))?;
+            cmd.arg("-xf");
+        }
+
+        cmd.arg(tar_path).arg("-C").arg(extract_dir);
+
+        let output = cmd.output().context(format!(
+            "Failed to run tar command for file: {:?}",
+            tar_path
+        ))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow::anyhow!(
+                "Failed to extract tar file {:?}: {}",
+                tar_path,
+                stderr
+            ));
         }
 
         Ok(())
