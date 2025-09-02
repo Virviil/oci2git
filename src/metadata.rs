@@ -93,14 +93,19 @@ pub fn from_oci_config(config: &ImageConfiguration) -> ImageMetadata {
     // Convert history entries
     let history: Vec<HistoryEntry> = config
         .history()
-        .iter()
-        .map(|h| HistoryEntry {
-            created: h.created().clone().unwrap_or_default(),
-            created_by: h.created_by().clone().unwrap_or_default(),
-            comment: h.comment().clone(),
-            empty_layer: Some(h.empty_layer().unwrap_or(false)),
+        .as_ref()
+        .map(|hist_vec| {
+            hist_vec
+                .iter()
+                .map(|h| HistoryEntry {
+                    created: h.created().clone().unwrap_or_default(),
+                    created_by: h.created_by().clone().unwrap_or_default(),
+                    comment: h.comment().clone(),
+                    empty_layer: h.empty_layer(),
+                })
+                .collect()
         })
-        .collect();
+        .unwrap_or_default();
 
     // Create ImageMetadata with a placeholder ID that will be replaced with the actual ID from the manifest
     ImageMetadata {
