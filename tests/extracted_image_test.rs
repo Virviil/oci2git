@@ -34,7 +34,7 @@ fn test_extracted_image_eager_loading() {
     );
     assert!(!metadata.os.is_empty(), "OS should be set");
     assert_eq!(
-        metadata.id, "sha256:9a44f1c8a8d457adcbd2e389c0cb2968a35d19898c1fe22086521fc8b2082ab0",
+        metadata.id, "sha256:6281ae58699c996183feb2c9732e340bff56a4951f1f85953c1901163931a5e7",
         "Image ID should match provided sha256 hash"
     );
 
@@ -166,11 +166,11 @@ fn test_extracted_image_multiple_calls() {
     assert_eq!(metadata1.os, metadata2.os);
     assert_eq!(
         metadata1.id,
-        "sha256:9a44f1c8a8d457adcbd2e389c0cb2968a35d19898c1fe22086521fc8b2082ab0"
+        "sha256:6281ae58699c996183feb2c9732e340bff56a4951f1f85953c1901163931a5e7"
     );
     assert_eq!(
         metadata2.id,
-        "sha256:9a44f1c8a8d457adcbd2e389c0cb2968a35d19898c1fe22086521fc8b2082ab0"
+        "sha256:6281ae58699c996183feb2c9732e340bff56a4951f1f85953c1901163931a5e7"
     );
 
     // Layers should be identical

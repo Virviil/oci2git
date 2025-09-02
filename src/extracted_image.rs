@@ -160,11 +160,30 @@ impl ExtractedImage {
         // Convert to our metadata format
         let mut metadata = metadata::from_oci_config(&config);
 
-        // Extract digest from config file path (format: blobs/sha256/HASH)
-        if let Some(digest_hash) = config_file.strip_prefix("blobs/sha256/") {
-            metadata.id = format!("sha256:{}", digest_hash);
-        } else if let Some(digest_hash) = config_file.strip_suffix(".json") {
-            metadata.id = format!("sha256:{}", digest_hash);
+        // Extract the image manifest digest from index.json (this matches what docker image inspect shows as ID)
+        let index_path = extract_dir.join("index.json");
+        if index_path.exists() {
+            let index_content =
+                fs::read_to_string(&index_path).context("Failed to read index.json")?;
+            let index: serde_json::Value =
+                serde_json::from_str(&index_content).context("Failed to parse index.json")?;
+
+            if let Some(manifests) = index["manifests"].as_array() {
+                if let Some(first_manifest) = manifests.first() {
+                    if let Some(digest) = first_manifest["digest"].as_str() {
+                        metadata.id = digest.to_string();
+                    }
+                }
+            }
+        }
+
+        // Fallback: Extract digest from config file path (format: blobs/sha256/HASH)
+        if metadata.id.is_empty() {
+            if let Some(digest_hash) = config_file.strip_prefix("blobs/sha256/") {
+                metadata.id = format!("sha256:{}", digest_hash);
+            } else if let Some(digest_hash) = config_file.strip_suffix(".json") {
+                metadata.id = format!("sha256:{}", digest_hash);
+            }
         }
 
         // Add repo tags from the manifest (these are not in the config)
