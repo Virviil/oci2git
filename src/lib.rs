@@ -15,5 +15,6 @@ pub use notifier::Notifier;
 pub use processor::ImageProcessor;
 pub use sources::DockerSource;
 pub use sources::NerdctlSource;
+pub use sources::RegistrySource;
 pub use sources::Source;
 pub use sources::TarSource;

@@ -1,5 +1,6 @@
 pub mod docker;
 pub mod nerdctl;
+pub mod registry;
 pub mod tar;
 
 // Naming utilities for branch name generation
@@ -11,6 +12,7 @@ pub use source::Source;
 
 pub use docker::DockerSource;
 pub use nerdctl::NerdctlSource;
+pub use registry::RegistrySource;
 pub use tar::TarSource;
 
 /// Sanitizes a string to be safe for Git branch naming
