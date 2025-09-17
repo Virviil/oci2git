@@ -1,0 +1,86 @@
+name: "🐞 Bug Report"
+description: Report for a bug.
+title: "[BUG] - <title>"
+labels: ["bug"]
+
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: "Description"
+      description: Please enter an explicit description of your issue
+      placeholder: Short and explicit description of your incident...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reprod
+    attributes:
+      label: "Reproduction steps"
+      description: Please enter an explicit description of your issue
+      value: |
+        1. Go to '...'
+        2. Launch that command '....'
+        3. See error
+      render: bash
+    validations:
+      required: true
+
+  - type: input
+    id: component
+    attributes:
+      label: Affected component or area
+      description: What part of the project is affected?
+      placeholder: "example: CLI"
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: "Screenshots"
+      description: If applicable, add screenshots to help explain your problem.
+      value: |
+        ![DESCRIPTION](LINK.png)
+      render: bash
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: "Logs"
+      description: Please copy and paste any relevant log output. This will be automatically formatted into code, so no need for backticks.
+      render: bash
+    validations:
+      required: false
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: "OS"
+      description: What is the impacted environment ?
+      multiple: true
+      options:
+        - Windows
+        - Linux
+        - Mac
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version(s) affected
+      description: Which version(s) of the project are impacted?
+      placeholder: "example: v0.2.3, main branch"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Confirmation
+      options:
+        - label: I have searched existing [bugs issues](https://github.com/Virviil/oci2git/issues?q=label%3Abug) and found no duplicates
+          required: true
