@@ -23,6 +23,8 @@ walkdir = "2.5"
 git2 = "0.20"
 chrono = "0.4"
 oci-spec = { version = "0.8.1", features = ["image"] }
+oci-client = "0.15"
+tokio = { version = "1.0", features = ["full"] }
 indicatif = "0.17"
 log = "0.4"
 env_logger = "0.11"
