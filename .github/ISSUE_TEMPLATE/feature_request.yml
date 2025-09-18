@@ -1,0 +1,53 @@
+name: "💡 Feature Request"
+description: Request new or improved functionality or changes to existing functionality
+title: "[REQUEST] - <title>"
+labels: ["enhancement"]
+
+body:
+  - type: dropdown
+    id: new_or_improvement
+    attributes:
+      label: Is this a new feature, an improvement, or a change to existing functionality?
+      options:
+        - New Feature
+        - Improvement
+        - Change
+    validations:
+      required: true
+
+  - type: dropdown
+    id: criticality
+    attributes:
+      label: How would you describe the priority of this feature request
+      options:
+        - Must have
+        - Should have
+        - Nice to have
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Please provide a clear description of problem this feature solves
+      description: Real usage examples are especially helpful, non-code.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Describe your ideal solution
+      description: Please describe the functionality you would like added.
+      placeholder: >
+        You can even provide a reference implementation in other library.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Confirmation
+      options:
+        - label: I have searched existing [requests](https://github.com/Virviil/oci2git/issues?q=label%3Aenhancement) and found no duplicates
+          required: true
