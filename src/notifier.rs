@@ -1,3 +1,21 @@
+//! Unified logging and progress UI.
+//!
+//! [`Notifier`] wraps `env_logger` (text logs) and `indicatif` (spinners/bars) under a single
+//! verbosity switch:
+//! - [`VerbosityLevel::Quiet`] → no text logs; shows a live spinner and optional progress bars.
+//! - [`VerbosityLevel::Info`]/[`VerbosityLevel::Debug`]/[`VerbosityLevel::Trace`] → standard logs.
+//!
+//! What you get:
+//! - [`Notifier::info`]/[`Notifier::debug`]/[`Notifier::warn`]/[`Notifier::trace`] — emit logs
+//!   (or update the Quiet-mode spinner message for `info`).
+//! - [`Notifier::create_progress_bar`] — add a pretty progress bar (Quiet mode only).
+//! - [`Notifier::progress`] — periodic textual progress for non-Quiet modes.
+//! - [`Notifier::use_beautiful_progress`] — check if UI bars are active.
+//! - [`Notifier::verbosity_level`] — read the current level.
+//!
+//! Levels map to `env_logger` filters; Quiet suppresses logs (≥ Warn) while rendering
+//! spinners/bars via an internal `MultiProgress`.
+
 use env_logger::Env;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use log::{Level, LevelFilter, Log, Record};
