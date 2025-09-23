@@ -1,3 +1,10 @@
+//! Tracks and validates container image layer lineage.
+//!
+//! This module provides [`DigestTracker`], which:
+//! - Records layer metadata in build order (digest, command, created, empty, comment).
+//! - Loads existing history from `Image.md` via `image_metadata::ImageMetadata`.
+//! - Compares recorded entries with `extracted_image::Layer` to detect continuity.
+
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;

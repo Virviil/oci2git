@@ -1,3 +1,24 @@
+//! Human-readable image report model with Markdown round-trip.
+//!
+//! This module defines a structured representation of `Image.md`:
+//! - [`ImageMetadata`] — the root document with optional [`BasicInfo`] and
+//!   [`ContainerConfig`], plus ordered layer history (`Vec<`[`crate::digest_tracker::LayerDigest`]`>`).
+//! - [`BasicInfo`] — name, id (digest), tags, created, architecture, OS.
+//! - [`ContainerConfig`] — env, command, entrypoint, workdir, exposed ports, labels.
+//!
+//! Capabilities:
+//! - Render to Markdown: [`ImageMetadata::render_markdown`] (includes a “Layer History” table,
+//!   escapes `|` in commands/comments for correct table layout).
+//! - Parse from Markdown: [`ImageMetadata::parse_markdown`] (robust to code blocks/tables;
+//!   unescapes `\|` back to `|`).
+//! - File I/O helpers: [`ImageMetadata::save_markdown`] and [`ImageMetadata::load_markdown`].
+//! - Populate layer rows directly from a [`crate::digest_tracker::DigestTracker`]
+//!   via [`ImageMetadata::update_layer_digests`] or build from a legacy metadata struct with
+//!   [`ImageMetadata::from_legacy`].
+//!
+//! The format is designed for stable diffs in Git and faithful round-trips between
+//! the in-memory model and `Image.md`.
+
 use crate::digest_tracker::{DigestTracker, LayerDigest};
 use anyhow::{Context, Result};
 use std::collections::HashMap;

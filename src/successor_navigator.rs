@@ -1,3 +1,25 @@
+//! Find the best Git commit to branch from by replaying layer history.
+//!
+//! [`SuccessorNavigator`] walks a repo’s commit graph and tries to align a new image’s
+//! ordered layers (oldest → newest) with existing commits, one layer at a time.
+//!
+//! - [`SuccessorNavigator::find_branch_point`] — returns `(commit, matched_layers)` where
+//!   `commit` is the last commit that matches the prefix of `new_layers`. If no match is
+//!   found, `commit` is `None` and `matched_layers` is `0`.
+//!
+//! How it works:
+//! 1) Start either at all root commits (no parents) or the previously matched commit’s successors.
+//! 2) For each layer position `i`, scan candidate commits and pick the first whose recorded
+//!    `Image.md` matches the expected layer at `i` (via
+//!    [`crate::digest_tracker::DigestTracker::layer_matches`]).
+//! 3) Stop at the first mismatch and return the current commit and number of matched layers.
+//! 4) If all layers match, return the final commit and `new_layers.len()`.
+//!
+//! Internals:
+//! - Per-commit digests are loaded from `Image.md` using
+//!   [`crate::image_metadata::ImageMetadata::parse_markdown`] and wrapped into a
+//!   [`crate::digest_tracker::DigestTracker`].
+
 use crate::digest_tracker::DigestTracker;
 use crate::git::GitRepo;
 use anyhow::{Context, Result};

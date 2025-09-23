@@ -1,16 +1,55 @@
+//! Wrapper around [`git2`] for branch and commits management .
+//!
+//! [`GitRepo`] exposes common flows you need for building history from layered filesystems:
+//! - [`GitRepo::init_with_branch`] — open or init a repo, set `user.name`/`user.email`, and
+//!   optionally select an **unborn** (orphan) branch; it will materialize on the first commit.
+//! - [`GitRepo::create_branch`] — create a branch from an existing commit or select a new unborn
+//!   branch (HEAD attached to a yet-to-be-created ref); resets the worktree if branching from a commit.
+//! - [`GitRepo::commit_all_changes`] — stage everything and commit to `HEAD`; returns `true` if
+//!   there were staged changes, `false` for an “empty” commit.
+//! - [`GitRepo::get_branch_commits`] — list commit OIDs oldest → newest for a branch.
+//! - [`GitRepo::get_all_branches`] / [`GitRepo::branch_exists`] / [`GitRepo::exists_and_has_commits`].
+//! - [`GitRepo::read_file_from_commit`] — read a UTF-8 file blob from a specific commit.
+//! - [`GitRepo::get_commit_successors`] — find the next commits after a given commit across branches.
+//!
+//! This wrapper is intentionally small; for advanced operations consult [`git2`] / libgit2 docs.
+
 use anyhow::{Context, Result};
 use git2::{IndexAddOption, Repository, Signature};
 use std::path::Path;
 
+/// A convenience wrapper around [`git2::Repository`] with helper methods for
+/// creating branches, staging all changes, committing, and simple history lookups.
+///
+/// `GitRepo` owns a live [`Repository`] handle; it neither deletes the on-disk repo
+/// nor spawns threads. See the upstream `git2` docs for lower-level primitives.
 pub struct GitRepo {
-    repo: Repository,
+    pub repo: Repository,
 }
 
 const USERNAME: &str = "oci2git";
 const EMAIL: &str = "oci2git@example.com";
 
 impl GitRepo {
-    /// Initialize a new repository or open an existing one
+    /// Open an existing Git repository at `path` or initialize a new one, then
+    /// set `user.name` / `user.email`. If `branch_name` is provided, move `HEAD`
+    /// to that branch:
+    ///
+    /// - If the branch **already exists**, `HEAD` attaches to it.
+    /// - If it **doesn’t exist yet**, `HEAD` becomes an **unborn (orphan) branch**
+    ///   and will gain its first commit when you call [`GitRepo::commit_all_changes`].
+    ///
+    /// # Errors
+    /// - Repository open/init failures.
+    /// - Config access or `user.name`/`user.email` write failures.
+    /// - Any failure from [`GitRepo::create_branch`] when `branch_name` is `Some(...)`.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// use std::path::Path;
+    /// let repo = oci2git::GitRepo::init_with_branch(Path::new("./.temp"), Some("main"))?;
+    /// # anyhow::Ok(())
+    /// ```
     pub fn init_with_branch(path: &Path, branch_name: Option<&str>) -> Result<Self> {
         // Try to open existing repo first, then init if it doesn't exist
         let repo = if path.join(".git").exists() {
@@ -36,7 +75,27 @@ impl GitRepo {
 
         Ok(git_repo)
     }
-
+    /// Create/select a local branch and make `HEAD` point to it.
+    ///
+    /// - `from_commit: Some(oid)` — create `branch_name` at `oid`, set `HEAD` to it,
+    ///   and **hard-reset** the worktree to the target commit (deterministic clean start).
+    /// - `from_commit: None` — **select an unborn/orphan branch** by setting `HEAD`
+    ///   to `refs/heads/{branch_name}`. The ref will be created on the first commit.
+    ///
+    /// # Errors
+    /// - Invalid OID or missing commit when branching from a commit.
+    /// - Branch creation, setting `HEAD`, or checkout/reset failures.
+    ///
+    /// # Examples
+    /// ```
+    /// # use tempfile::tempdir;
+    /// # let temp_dir = tempdir().unwrap();
+    /// # let repo = oci2git::GitRepo::init_with_branch(temp_dir.path(), Some("main")).unwrap();
+    ///
+    /// // Orphan branch:
+    /// repo.create_branch("scratch", None)?;
+    /// # anyhow::Ok(())
+    /// ```
     pub fn create_branch(&self, branch_name: &str, from_commit: Option<git2::Oid>) -> Result<()> {
         match from_commit {
             Some(commit_oid) => {
@@ -71,7 +130,31 @@ impl GitRepo {
 
         Ok(())
     }
-
+    /// Stage **all** paths and create a commit on `HEAD`.
+    ///
+    /// Returns `Ok(true)` if the index had changes, `Ok(false)` if the commit was
+    /// made with an empty tree diff (useful for metadata-only commits).
+    ///
+    /// Internally, this:
+    /// - creates a signature with `USERNAME`/`EMAIL`,
+    /// - `add_all(["*"], ...)` to stage paths,
+    /// - writes the index and tree,
+    /// - looks up the current `HEAD` commit (if any) as the parent,
+    /// - and calls `commit("HEAD", ...)`. (For unborn branches, this becomes the root commit.)
+    ///
+    /// # Errors
+    /// - Index operations, tree writes, signature creation, or commit creation can fail.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # use tempfile::tempdir;
+    /// # let temp_dir = tempdir().unwrap();
+    /// # let repo = oci2git::GitRepo::init_with_branch(temp_dir.path(), Some("main")).unwrap();
+    ///
+    /// let changed = repo.commit_all_changes("init")?;
+    /// assert!(changed);
+    /// # anyhow::Ok(())
+    /// ```
     pub fn commit_all_changes(&self, message: &str) -> Result<bool> {
         let signature =
             Signature::now(USERNAME, EMAIL).context("Failed to create git signature")?;
@@ -117,7 +200,10 @@ impl GitRepo {
         Ok(has_changes)
     }
 
-    /// Get all commits from a specific branch (oldest to newest)
+    /// Return all commit OIDs for `branch_name`, ordered **oldest → newest**.
+    ///
+    /// # Errors
+    /// - Branch not found or revwalk/iteration failures.
     pub fn get_branch_commits(&self, branch_name: &str) -> Result<Vec<git2::Oid>> {
         let branch = self
             .repo
@@ -141,7 +227,10 @@ impl GitRepo {
         Ok(commits.into_iter().rev().collect())
     }
 
-    /// Get all local branch names
+    /// List names of all local branches (e.g., `["ubuntu#latest...", "nginx#latest#linux-arm64#..."]`).
+    ///
+    /// # Errors
+    /// - Branch iteration or name resolution failures.
     pub fn get_all_branches(&self) -> Result<Vec<String>> {
         let branches = self.repo.branches(Some(git2::BranchType::Local))?;
         let mut branch_names = Vec::new();
@@ -156,14 +245,20 @@ impl GitRepo {
         Ok(branch_names)
     }
 
-    /// Check if a branch with the given name exists
+    /// Return `true` if a local branch named `branch_name` exists.
+    ///
+    /// This is a convenience wrapper around `repo.find_branch(...).is_ok()`.
     pub fn branch_exists(&self, branch_name: &str) -> bool {
         self.repo
             .find_branch(branch_name, git2::BranchType::Local)
             .is_ok()
     }
 
-    /// Check if the repository already exists and has commits
+    /// Heuristic: does the repo have **any** local branches?
+    ///
+    /// Because branch creation on an unborn branch only materializes after the first
+    /// commit, a freshly initialized repo with `HEAD` pointing at an unborn branch will
+    /// still report “no branches” here until the first commit lands.
     pub fn exists_and_has_commits(&self) -> bool {
         if let Ok(branches) = self.get_all_branches() {
             !branches.is_empty()
@@ -192,7 +287,31 @@ impl GitRepo {
         Ok(commit.message().unwrap_or("").to_string())
     }
 
-    /// Read a file from a specific commit
+    /// Read a UTF-8 file `file_path` from the given `commit_oid`.
+    ///
+    /// # Errors
+    /// - Unknown commit, missing tree entries, non-UTF-8 blob content.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # use tempfile::tempdir;
+    /// # use std::path::Path;
+    /// # use std::fs;
+    /// # // temp repo + branch
+    /// # let tmp = tempdir()?;
+    /// # let repo = oci2git::GitRepo::init_with_branch(tmp.path(), Some("main"))?;
+    /// # // create Image.md and commit -> HEAD commit to read from
+    /// # fs::write(tmp.path().join("Image.md"), "hello")?;
+    /// # repo.commit_all_changes("add Image.md")?;
+    /// # // get the current HEAD commit OID
+    /// # let head = repo.repo.head()?;
+    /// # let commit = head.peel_to_commit()?;
+    /// # let oid = commit.id();
+    /// // read the file from that commit
+    /// let text = repo.read_file_from_commit(oid, "Image.md")?;
+    /// println!("{}", text);
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
     pub fn read_file_from_commit(&self, commit_oid: git2::Oid, file_path: &str) -> Result<String> {
         // Get the commit object
         let commit = self
@@ -226,8 +345,16 @@ impl GitRepo {
         }
     }
 
-    /// Get all commits that are successors to the given commit across all branches
-    /// If commit_oid is None, returns all commits without parents (root commits)
+    /// Find the **next** commits (successors) after `commit_oid` across all local branches.
+    ///
+    /// - If `Some(oid)`, returns the commit *immediately after* `oid` on any branch
+    ///   where it appears. Multiple branches may yield multiple successors.
+    /// - If `None`, returns **root commits** (commits with no parents) for each branch.
+    ///
+    /// The output is deduplicated.
+    ///
+    /// # Errors
+    /// - Branch enumeration or history traversal failures.
     pub fn get_commit_successors(&self, commit_oid: Option<git2::Oid>) -> Result<Vec<git2::Oid>> {
         let mut successors = Vec::new();
         let branches = self.get_all_branches()?;

@@ -1,3 +1,5 @@
+//! Source trait for getting OCI images from different container sources
+
 pub mod docker;
 pub mod nerdctl;
 pub mod tar;

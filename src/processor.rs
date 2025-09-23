@@ -1,3 +1,17 @@
+//! End-to-end “OCI image → Git repo” pipeline orchestrator.
+//!
+//! This module provides [`ImageProcessor`], a high-level orchestrator that:
+//! - fetches an image tarball from a concrete [`crate::sources::Source`],
+//! - unpacks and replays the ordered filesystem layers into a working `rootfs/`,
+//! - commits each step into a Git branch (one commit per layer, preserving history),
+//! - and finishes with a metadata commit (`Image.md`) that captures image basics,
+//!   container config, and the full layer digest chain.
+//!
+//! Duplicate safety: if a matching branch exists and all layers match, conversion is skipped.
+//!
+//! Construction helpers:
+//! - [`ImageProcessor::new`] — inject a concrete [`Source`] and a [`Notifier`].
+
 use crate::digest_tracker::DigestTracker;
 use crate::extracted_image::ExtractedImage;
 use crate::git::GitRepo;
@@ -10,16 +24,90 @@ use std::fs;
 use std::path::Path;
 use walkdir;
 
+/// Orchestrates the OCI image to Git repo conversion pipeline for a concrete [`Source`].
+///
+/// The processor downloads (or otherwise obtains) an image tarball via `S`,
+/// replays its layers into `rootfs/` with overlay/whiteout semantics, and
+/// records each step as a Git commit on a branch derived from source + tag + digest.
+/// The last commit writes `Image.md` with comprehensive metadata.
+///
+/// ### Type parameters
+/// - `S`: a concrete image source (see [`crate::sources`]) that knows how to
+///   retrieve an image tarball and suggest a branch name.
+///
+/// ### Concurrency
+/// `ImageProcessor<S>` does not spawn threads by itself. It is `Send`/`Sync` only
+/// if `S` and [`Notifier`] are.
 pub struct ImageProcessor<S: Source> {
+    /// The concrete image source (registry/daemon/nerdctl/tar, etc.).
     source: S,
     notifier: Notifier,
 }
 
 impl<S: Source> ImageProcessor<S> {
+    /// Constructs a new processor that will use the given [`Source`] and [`Notifier`].
+    ///
+    /// The processor has no internal state beyond these handles; reuse it to process
+    /// multiple images with the same source/notification strategy.
+    ///
+    /// Check [`crate::notifier::VerbosityLevel`] for more verbosity levels params
+    ///
     pub fn new(source: S, notifier: Notifier) -> Self {
         Self { source, notifier }
     }
-
+    /// Convert an image into a Git repository at `output_dir`.
+    ///
+    /// This will:
+    /// 1. **Fetch** the image tarball via `S` and build an [`ExtractedImage`].
+    /// 2. **Analyze** layers (oldest → newest) and read base metadata (OS, arch, id, tags).
+    /// 3. **Initialize/Open** a [`GitRepo`] in `output_dir`, derive the branch name with
+    ///    [`Source::branch_name`], and find an optimal branch point using
+    ///    [`SuccessorNavigator`] (skipping already-materialized layers when possible).
+    /// 4. **Replay** each layer into `rootfs/`, interpreting overlayfs whiteouts
+    ///    (`.wh.*`) and opaque directories (`.wh..wh..opq`) as per the OCI layer spec.
+    /// 5. **Commit** one layer per commit (empty layers become metadata-only commits),
+    ///    maintain a running [`DigestTracker`], and keep `Image.md` in sync via
+    ///    [`ImageMetadata`].
+    /// 6. **Finish** with a final metadata commit including basic info, container config,
+    ///    and the complete digest history.
+    ///
+    /// If a branch with matching content already exists, the conversion is skipped.
+    ///
+    /// # Parameters
+    /// - `image_name`: something your [`Source`] can resolve (e.g. `"alpine:3.20"` or
+    ///   a tar/OCI reference depending on `S`).
+    /// - `output_dir`: an existing or new directory that will contain a Git repo,
+    ///   a working `rootfs/`, and `Image.md`.
+    ///
+    /// # Returns
+    /// `Ok(())` on success. On failure, returns an [`anyhow::Result`] describing
+    /// the error with context. You can bubble these up or downcast as needed.
+    ///
+    /// # Errors
+    /// - Image fetch/extraction failures from the underlying [`Source`] or tar processing
+    ///   (I/O, format, missing layers).
+    /// - Git repository initialization/commit errors.
+    /// - Filesystem operations while applying layers (permissions, symlinks, deletions).
+    /// - Metadata serialization/parsing of `Image.md`.
+    ///
+    /// # Panics
+    /// This method is not intended to panic. If you observe a panic, please file a bug
+    /// with the offending image and stack trace.
+    ///
+    /// ### Examples
+    /// ```no_run
+    /// use std::path::Path;
+    /// use oci2git::{DockerSource, ImageProcessor, Notifier};
+    ///
+    /// // Choose your source (e.g., Docker daemon/registry, nerdctl, tar file, etc.)
+    /// // let src = DockerSource;    // or TarSource::new("image.tar")?
+    /// let src = DockerSource;
+    /// let notifier = Notifier::new(1);
+    ///
+    /// let p = ImageProcessor::new(src, notifier);
+    /// p.convert("ubuntu:latest", Path::new("./ubuntu-image-repo"))?;
+    /// # anyhow::Ok(())
+    /// ```
     pub fn convert(&self, image_name: &str, output_dir: &Path) -> Result<()> {
         self.notifier.info(&format!(
             "Starting conversion of image with {} source: {}",

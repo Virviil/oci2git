@@ -1,3 +1,25 @@
+//! OCI config → legacy-compatible image metadata + Markdown exporter.
+//!
+//! Types mirror Docker/`docker inspect` JSON (via serde renames) for
+//! backwards compatibility:
+//! - [`ImageMetadata`] — top-level fields (Id, RepoTags, Created, Architecture, Os, Config, History).
+//! - [`ContainerConfig`] — Env/Cmd/Entrypoint/ExposedPorts/WorkingDir/Volumes/Labels.
+//! - [`HistoryEntry`] — created/created_by/comment/empty_layer.
+//!
+//! Conversion & formatting:
+//! - [`from_oci_config`] — build [`ImageMetadata`] from
+//!   [`oci_spec::image::ImageConfiguration`], mapping exposed ports/volumes to maps,
+//!   carrying env/cmd/entrypoint/labels, and converting history.
+//! - [`generate_markdown_metadata`] — write a human-readable `Image.md`.
+//!   Uses an internal formatter that strips common shell prefixes
+//!   (`/bin/sh -c #(nop)`, `/bin/sh -c`) and escapes `|` to keep tables intact.
+//!
+//! Notes:
+//! - `ImageMetadata.id` is initialized as a placeholder; callers typically
+//!   replace it with the manifest digest discovered elsewhere.
+//! - Long commands are preserved verbatim; pipe characters are escaped only
+//!   in Markdown output.
+
 use anyhow::Result;
 use oci_spec::image::ImageConfiguration;
 use serde::{Deserialize, Serialize};
