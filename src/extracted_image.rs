@@ -1,3 +1,34 @@
+//! Extract an OCI/Docker image tarball into a typed, queryable structure.
+//!
+//! [`ExtractedImage`] unwraps a `docker save`/OCI image tarball into:
+//! - High-level [`ImageMetadata`] (id, repo tags, os, architecture).
+//! - Ordered [`Layer`] records (oldest → newest) with:
+//!   - `id` (derived from blob filename or `<empty-layer-N>`),
+//!   - normalized `command` (shell prefix stripped),
+//!   - `created_at` (`chrono::DateTime<Utc>`),
+//!   - `is_empty` (from history `empty_layer`),
+//!   - `tarball_path` (`Some` for non-empty),
+//!   - `digest` (`sha256:<hash>` for blobs, `"empty"` for empty).
+//!
+//! Key behavior:
+//! - Supports plain `.tar` and gzip (`.tar.gz`) by checking magic bytes, then invoking `tar`.
+//! - Validates expected layout (`manifest.json` required).
+//! - Loads metadata from `manifest.json`, `index.json`, and the config JSON
+//!   (prefers manifest digest; falls back to config path).
+//! - Maps history entries to blob layers by walking history in reverse and pairing
+//!   them with manifest `Layers`, then re-reverses to chronological order.
+//! - Canonicalizes layer digests via `digest_tracker::DigestTracker::extract_digest_from_tarball_path`.
+//!
+//! Public API highlights:
+//! - [`ExtractedImage::from_tarball`] — extract + parse into memory (with progress via [`Notifier`]).
+//! - [`ExtractedImage::metadata`] / [ExtractedImage::os] / [ExtractedImage::architecture] — access image facts.
+//! - [`ExtractedImage::layers`] — get the ordered layer list.
+//! - [`ExtractedImage::extract_layer_to`] — unpack a single layer tarball into a directory.
+//! - [`ExtractedImage::extract_dir`] — path to the temporary extraction root.
+//!
+//! Errors include malformed manifests/configs, missing files, or `tar` failures.
+//! Temporary extraction is scoped to the instance lifetime via `tempfile::TempDir`.
+
 use crate::metadata::{self, ImageMetadata};
 use crate::notifier::Notifier;
 use anyhow::{anyhow, Context, Result};
