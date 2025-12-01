@@ -29,6 +29,14 @@ impl DockerSource {
         Ok(stdout)
     }
 
+    fn image_exists(&self, image_name: &str) -> bool {
+        Command::new("docker")
+            .args(["image", "inspect", image_name])
+            .output()
+            .map(|output| output.status.success())
+            .unwrap_or(false)
+    }
+
     fn pull_image(&self, image_name: &str, notifier: &Notifier) -> Result<()> {
         notifier.info(&format!("Pulling Docker image '{}'...", image_name));
 
@@ -80,9 +88,8 @@ impl Source for DockerSource {
                 Ok((tarball_path, Some(temp_dir)))
             }
             Err(e) => {
-                let error_msg = e.to_string();
-                // Check if the error is about missing image
-                if error_msg.contains("No such image") || error_msg.contains("pull access denied") {
+                // Save failed - check if it's because the image doesn't exist
+                if !self.image_exists(image_name) {
                     notifier.info(&format!(
                         "Image '{}' not found locally, attempting to pull...",
                         image_name
@@ -102,7 +109,7 @@ impl Source for DockerSource {
 
                     Ok((tarball_path, Some(temp_dir)))
                 } else {
-                    // Different error - propagate it
+                    // Image exists but save failed for another reason - propagate original error
                     Err(e)
                 }
             }
