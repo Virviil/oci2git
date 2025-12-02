@@ -160,7 +160,7 @@ impl<S: Source> ImageProcessor<S> {
         ));
         let branch_name = self.source.branch_name(image_name, &os_arch, &metadata.id);
         self.notifier
-            .debug(&format!("Generated branch name: '{}'", branch_name));
+            .debug(&format!("Generated branch name: '{branch_name}'"));
 
         // Initialize or open repository
         let repo = GitRepo::init_with_branch(output_dir, None)?;
@@ -175,8 +175,7 @@ impl<S: Source> ImageProcessor<S> {
             match branch_commit {
                 Some(commit) => {
                     self.notifier.info(&format!(
-                        "Found optimal branch point at commit {}, skipping {} matched layers",
-                        commit, matched_layers
+                        "Found optimal branch point at commit {commit}, skipping {matched_layers} matched layers"
                     ));
                     (Some(commit), matched_layers)
                 }
@@ -196,8 +195,7 @@ impl<S: Source> ImageProcessor<S> {
         // it means we're processing the exact same image again
         if repo.branch_exists(&branch_name) && skip_layers == layers.len() {
             self.notifier.info(&format!(
-                "Image '{}' already exists as branch '{}' with identical content. Skipping duplicate processing.",
-                image_name, branch_name
+                "Image '{image_name}' already exists as branch '{branch_name}' with identical content. Skipping duplicate processing."
             ));
             return Ok(());
         }
@@ -269,8 +267,7 @@ impl<S: Source> ImageProcessor<S> {
         // Now process layers starting from the first unmatched layer
         let layers_to_process = layers.len() - skip_layers;
         self.notifier.info(&format!(
-            "Processing {} layers (skipping {} matched layers)...",
-            layers_to_process, skip_layers
+            "Processing {layers_to_process} layers (skipping {skip_layers} matched layers)..."
         ));
 
         for (i, layer) in layers.iter().enumerate().skip(skip_layers) {
@@ -333,7 +330,7 @@ impl<S: Source> ImageProcessor<S> {
                 .info(&format!("Extracting layer {}/{}", i + 1, layers.len()));
 
             self.notifier
-                .debug(&format!("Extracting tarball: {:?}", layer_tarball));
+                .debug(&format!("Extracting tarball: {layer_tarball:?}"));
             fs::create_dir_all(&rootfs_path)?;
 
             // Extract the layer tarball directly to rootfs

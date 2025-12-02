@@ -168,7 +168,7 @@ fn format_image_metadata_markdown(metadata: &ImageMetadata) -> Result<String> {
         markdown.push_str("### Environment Variables\n\n");
         markdown.push_str("```\n");
         for env in &metadata.container_config.env {
-            markdown.push_str(&format!("{}\n", env));
+            markdown.push_str(&format!("{env}\n"));
         }
         markdown.push_str("```\n\n");
     }
@@ -189,7 +189,7 @@ fn format_image_metadata_markdown(metadata: &ImageMetadata) -> Result<String> {
 
     if let Some(working_dir) = &metadata.container_config.working_dir {
         if !working_dir.is_empty() {
-            markdown.push_str(&format!("### Working Directory\n\n`{}`\n\n", working_dir));
+            markdown.push_str(&format!("### Working Directory\n\n`{working_dir}`\n\n"));
         }
     }
 
@@ -197,7 +197,7 @@ fn format_image_metadata_markdown(metadata: &ImageMetadata) -> Result<String> {
         if !ports.is_empty() {
             markdown.push_str("### Exposed Ports\n\n");
             for port in ports.keys() {
-                markdown.push_str(&format!("- `{}`\n", port));
+                markdown.push_str(&format!("- `{port}`\n"));
             }
             markdown.push('\n');
         }
@@ -207,7 +207,7 @@ fn format_image_metadata_markdown(metadata: &ImageMetadata) -> Result<String> {
         if !volumes.is_empty() {
             markdown.push_str("### Volumes\n\n");
             for volume in volumes.keys() {
-                markdown.push_str(&format!("- `{}`\n", volume));
+                markdown.push_str(&format!("- `{volume}`\n"));
             }
             markdown.push('\n');
         }
@@ -219,7 +219,7 @@ fn format_image_metadata_markdown(metadata: &ImageMetadata) -> Result<String> {
             markdown.push_str("| Key | Value |\n");
             markdown.push_str("|-----|-------|\n");
             for (key, value) in labels {
-                markdown.push_str(&format!("| `{}` | `{}` |\n", key, value));
+                markdown.push_str(&format!("| `{key}` | `{value}` |\n"));
             }
             markdown.push('\n');
         }

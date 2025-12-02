@@ -5,7 +5,7 @@ use std::path::PathBuf;
 /// If no tag is specified, adds "latest" as the default tag
 pub fn container_image_to_branch(image_name: &str) -> String {
     let normalized = if !image_name.contains(':') && !image_name.contains('@') {
-        format!("{}:latest", image_name)
+        format!("{image_name}:latest")
     } else {
         image_name.to_string()
     };
@@ -32,10 +32,10 @@ pub fn tar_path_to_branch(tar_path: &str) -> String {
 /// Extracts short digest (first 12 characters after "sha256:")
 pub fn combine_branch_with_digest(base_branch: &str, os_arch: &str, image_digest: &str) -> String {
     if let Some(short_digest) = super::extract_short_digest(image_digest) {
-        format!("{}#{}#{}", base_branch, os_arch, short_digest)
+        format!("{base_branch}#{os_arch}#{short_digest}")
     } else {
         // Fallback: use image_digest as-is if it doesn't have sha256: prefix
-        format!("{}#{}#{}", base_branch, os_arch, image_digest)
+        format!("{base_branch}#{os_arch}#{image_digest}")
     }
 }
 

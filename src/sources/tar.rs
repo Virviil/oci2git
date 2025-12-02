@@ -69,10 +69,10 @@ impl Source for TarSource {
     fn branch_name(&self, image_path: &str, os_arch: &str, image_digest: &str) -> String {
         let base_branch = tar_to_branch(image_path);
         if let Some(short_digest) = super::extract_short_digest(image_digest) {
-            format!("{}#{}#{}", base_branch, os_arch, short_digest)
+            format!("{base_branch}#{os_arch}#{short_digest}")
         } else {
             // Fallback: use image_digest as-is if it doesn't have sha256: prefix
-            format!("{}#{}#{}", base_branch, os_arch, image_digest)
+            format!("{base_branch}#{os_arch}#{image_digest}")
         }
     }
 }

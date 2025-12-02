@@ -40,14 +40,12 @@ pub fn test_basic_tar_processing<S: Source>(source: S, tar_path: &str) -> Result
 pub fn verify_extracted_files(output_dir: &Path, expected_files: &[(&str, &str)]) -> Result<()> {
     for (file_path, expected_content) in expected_files {
         let full_path = output_dir.join("rootfs").join(file_path);
-        assert!(full_path.exists(), "File {} should exist", file_path);
+        assert!(full_path.exists(), "File {file_path} should exist");
 
         let content = fs::read_to_string(&full_path)?;
         assert!(
             content.contains(expected_content),
-            "File {} should contain '{}'",
-            file_path,
-            expected_content
+            "File {file_path} should contain '{expected_content}'"
         );
     }
     Ok(())
@@ -61,8 +59,7 @@ pub fn verify_environment_variables(output_dir: &Path, expected_vars: &[&str]) -
     for env_var in expected_vars {
         assert!(
             metadata_content.contains(env_var),
-            "Metadata should contain environment variable: {}",
-            env_var
+            "Metadata should contain environment variable: {env_var}"
         );
     }
     Ok(())
@@ -75,8 +72,7 @@ pub fn verify_entrypoint(output_dir: &Path, expected_entrypoint: &str) -> Result
 
     assert!(
         metadata_content.contains(expected_entrypoint),
-        "Metadata should contain entrypoint: {}",
-        expected_entrypoint
+        "Metadata should contain entrypoint: {expected_entrypoint}"
     );
     Ok(())
 }
@@ -111,8 +107,7 @@ mod tests {
         // Skip if fixture tar doesn't exist
         if !Path::new(FIXTURE_TAR_PATH).exists() {
             println!(
-                "Skipping test: fixture tar file not found at {}",
-                FIXTURE_TAR_PATH
+                "Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}"
             );
             return Ok(());
         }
@@ -127,8 +122,7 @@ mod tests {
         // Skip if fixture tar doesn't exist
         if !Path::new(FIXTURE_TAR_PATH).exists() {
             println!(
-                "Skipping test: fixture tar file not found at {}",
-                FIXTURE_TAR_PATH
+                "Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}"
             );
             return Ok(());
         }
@@ -157,8 +151,7 @@ mod tests {
         // Skip if fixture tar doesn't exist
         if !Path::new(FIXTURE_TAR_PATH).exists() {
             println!(
-                "Skipping test: fixture tar file not found at {}",
-                FIXTURE_TAR_PATH
+                "Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}"
             );
             return Ok(());
         }
@@ -186,8 +179,7 @@ mod tests {
         // Skip if fixture tar doesn't exist
         if !Path::new(FIXTURE_TAR_PATH).exists() {
             println!(
-                "Skipping test: fixture tar file not found at {}",
-                FIXTURE_TAR_PATH
+                "Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}"
             );
             return Ok(());
         }

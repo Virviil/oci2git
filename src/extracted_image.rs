@@ -59,7 +59,7 @@ impl ExtractedImage {
     pub fn from_tarball<P: AsRef<Path>>(tarball_path: P, notifier: &Notifier) -> Result<Self> {
         let tarball_path = tarball_path.as_ref();
 
-        notifier.debug(&format!("Extracting image tarball: {:?}", tarball_path));
+        notifier.debug(&format!("Extracting image tarball: {tarball_path:?}"));
 
         // Create a temporary directory for extraction
         let temp_dir = tempfile::tempdir().context("Failed to create temporary directory")?;
@@ -127,7 +127,7 @@ impl ExtractedImage {
 
     fn extract_tar_file(tar_path: &Path, extract_dir: &Path) -> Result<()> {
         tar_extractor::extract_tar(tar_path, extract_dir)
-            .context(format!("Failed to extract tar file: {:?}", tar_path))
+            .context(format!("Failed to extract tar file: {tar_path:?}"))
     }
 
     fn load_metadata_from_dir(extract_dir: &Path, image_name: &str) -> Result<ImageMetadata> {
@@ -151,7 +151,7 @@ impl ExtractedImage {
         // Read the config file as JSON
         let config_path = extract_dir.join(config_file);
         let config_content = fs::read_to_string(&config_path)
-            .context(format!("Failed to read config file: {}", config_file))?;
+            .context(format!("Failed to read config file: {config_file}"))?;
 
         // Parse as OCI ImageConfiguration
         let config: oci_spec::image::ImageConfiguration =
@@ -180,9 +180,9 @@ impl ExtractedImage {
         // Fallback: Extract digest from config file path (format: blobs/sha256/HASH)
         if metadata.id.is_empty() {
             if let Some(digest_hash) = config_file.strip_prefix("blobs/sha256/") {
-                metadata.id = format!("sha256:{}", digest_hash);
+                metadata.id = format!("sha256:{digest_hash}");
             } else if let Some(digest_hash) = config_file.strip_suffix(".json") {
-                metadata.id = format!("sha256:{}", digest_hash);
+                metadata.id = format!("sha256:{digest_hash}");
             }
         }
 
@@ -199,7 +199,7 @@ impl ExtractedImage {
             let path = PathBuf::from(image_name);
             if let Some(filename) = path.file_stem() {
                 if let Some(name) = filename.to_str() {
-                    metadata.repo_tags.push(format!("{}:latest", name));
+                    metadata.repo_tags.push(format!("{name}:latest"));
                 }
             }
         }
@@ -228,7 +228,7 @@ impl ExtractedImage {
         // Read the config file as JSON
         let config_path = extract_dir.join(config_file);
         let config_content = fs::read_to_string(&config_path)
-            .context(format!("Failed to read config file: {}", config_file))?;
+            .context(format!("Failed to read config file: {config_file}"))?;
 
         let config: serde_json::Value =
             serde_json::from_str(&config_content).context("Failed to parse image configuration")?;
@@ -302,7 +302,7 @@ impl ExtractedImage {
                 let id = tarball
                     .file_name()
                     .map(|name| name.to_string_lossy().to_string())
-                    .unwrap_or_else(|| format!("layer-{}", i));
+                    .unwrap_or_else(|| format!("layer-{i}"));
 
                 // Extract digest from tarball path
                 let digest =
@@ -311,7 +311,7 @@ impl ExtractedImage {
                 (id, Some(tarball.clone()), digest)
             } else {
                 // Empty layer or no tarball available
-                let id = format!("<empty-layer-{}>", i);
+                let id = format!("<empty-layer-{i}>");
                 let digest = if is_empty {
                     "empty".to_string()
                 } else {

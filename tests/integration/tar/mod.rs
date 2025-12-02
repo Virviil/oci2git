@@ -102,7 +102,7 @@ mod tests {
 
         // The result will depend on TarSource implementation
         // Some implementations might resolve relative paths, others might not
-        println!("Relative path result: {:?}", result);
+        println!("Relative path result: {result:?}");
 
         Ok(())
     }
@@ -112,8 +112,7 @@ mod tests {
         // Skip if fixture tar doesn't exist
         if !Path::new(FIXTURE_TAR_PATH).exists() {
             println!(
-                "Skipping test: fixture tar file not found at {}",
-                FIXTURE_TAR_PATH
+                "Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}"
             );
             return Ok(());
         }
@@ -133,8 +132,7 @@ mod tests {
         // files correctly - same logic used by all providers
         if !Path::new(FIXTURE_TAR_PATH).exists() {
             println!(
-                "Skipping test: fixture tar file not found at {}",
-                FIXTURE_TAR_PATH
+                "Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}"
             );
             return Ok(());
         }
@@ -165,8 +163,7 @@ mod tests {
         // metadata correctly - same logic used by all providers
         if !Path::new(FIXTURE_TAR_PATH).exists() {
             println!(
-                "Skipping test: fixture tar file not found at {}",
-                FIXTURE_TAR_PATH
+                "Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}"
             );
             return Ok(());
         }
@@ -194,8 +191,7 @@ mod tests {
         // git repositories correctly - same logic used by all providers
         if !Path::new(FIXTURE_TAR_PATH).exists() {
             println!(
-                "Skipping test: fixture tar file not found at {}",
-                FIXTURE_TAR_PATH
+                "Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}"
             );
             return Ok(());
         }
@@ -222,8 +218,7 @@ mod tests {
 
         if !Path::new(HARDLINK_FIXTURE).exists() {
             println!(
-                "Skipping test: hardlink fixture not found at {}",
-                HARDLINK_FIXTURE
+                "Skipping test: hardlink fixture not found at {HARDLINK_FIXTURE}"
             );
             println!("To generate: docker build -f tests/integration/fixtures/hardlink-test.Dockerfile -t oci2git-hardlink-test:latest . && docker save oci2git-hardlink-test:latest -o tests/integration/fixtures/hardlink-test-image.tar");
             return Ok(());
@@ -289,8 +284,7 @@ mod tests {
             let exists = file_path.exists() || std::fs::symlink_metadata(&file_path).is_ok();
             assert!(
                 exists,
-                "Expected file does not exist: {}",
-                file
+                "Expected file does not exist: {file}"
             );
         }
         println!("✓ All test files extracted successfully ({} files)", expected_files.len());
@@ -326,9 +320,9 @@ mod tests {
             if absolute_symlink.exists() {
                 let target = std::fs::read_link(&absolute_symlink)?;
                 // The symlink should point to an absolute path within rootfs
-                assert!(target.is_absolute(), "Symlink should be absolute: {:?}", target);
+                assert!(target.is_absolute(), "Symlink should be absolute: {target:?}");
                 assert!(target.to_string_lossy().contains("rootfs"),
-                    "Symlink should point to rootfs: {:?}", target);
+                    "Symlink should point to rootfs: {target:?}");
                 println!("✓ Absolute symlinks correctly point to rootfs");
             }
         }

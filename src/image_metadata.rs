@@ -154,7 +154,7 @@ impl ImageMetadata {
                 markdown.push_str("### Environment Variables\n\n");
                 markdown.push_str("```\n");
                 for env in &container_config.environment_variables {
-                    markdown.push_str(&format!("{}\n", env));
+                    markdown.push_str(&format!("{env}\n"));
                 }
                 markdown.push_str("```\n\n");
             }
@@ -162,14 +162,14 @@ impl ImageMetadata {
             if let Some(cmd) = &container_config.command {
                 markdown.push_str("### Command\n\n");
                 markdown.push_str("```\n");
-                markdown.push_str(&format!("{}\n", cmd));
+                markdown.push_str(&format!("{cmd}\n"));
                 markdown.push_str("```\n\n");
             }
 
             if let Some(entrypoint) = &container_config.entrypoint {
                 markdown.push_str("### Entrypoint\n\n");
                 markdown.push_str("```\n");
-                markdown.push_str(&format!("{}\n", entrypoint));
+                markdown.push_str(&format!("{entrypoint}\n"));
                 markdown.push_str("```\n\n");
             }
 
@@ -183,7 +183,7 @@ impl ImageMetadata {
             if !container_config.exposed_ports.is_empty() {
                 markdown.push_str("### Exposed Ports\n\n");
                 for port in &container_config.exposed_ports {
-                    markdown.push_str(&format!("- `{}`\n", port));
+                    markdown.push_str(&format!("- `{port}`\n"));
                 }
                 markdown.push('\n');
             }
@@ -193,7 +193,7 @@ impl ImageMetadata {
                 markdown.push_str("| Key | Value |\n");
                 markdown.push_str("|-----|-------|\n");
                 for (key, value) in &container_config.labels {
-                    markdown.push_str(&format!("| `{}` | `{}` |\n", key, value));
+                    markdown.push_str(&format!("| `{key}` | `{value}` |\n"));
                 }
                 markdown.push('\n');
             }
@@ -715,28 +715,23 @@ mod tests {
         {
             assert_eq!(
                 parsed.digest, original.digest,
-                "Layer {} digest mismatch",
-                i
+                "Layer {i} digest mismatch"
             );
             assert_eq!(
                 parsed.command, original.command,
-                "Layer {} command mismatch",
-                i
+                "Layer {i} command mismatch"
             );
             assert_eq!(
                 parsed.created, original.created,
-                "Layer {} created mismatch",
-                i
+                "Layer {i} created mismatch"
             );
             assert_eq!(
                 parsed.is_empty, original.is_empty,
-                "Layer {} empty flag mismatch",
-                i
+                "Layer {i} empty flag mismatch"
             );
             assert_eq!(
                 parsed.comment, original.comment,
-                "Layer {} comment mismatch",
-                i
+                "Layer {i} comment mismatch"
             );
         }
 

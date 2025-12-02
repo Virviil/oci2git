@@ -127,9 +127,9 @@ pub fn extract_tar(tar_path: &Path, extract_dir: &Path) -> Result<()> {
                     }
                 }
                 continue; // Skip the marker file itself
-            } else if file_name.starts_with(".wh.") {
+            } else if let Some(deleted_name) = file_name.strip_prefix(".wh.") {
                 // Whiteout marker - delete the target file/directory
-                let deleted_name = &file_name[4..]; // Remove ".wh." prefix
+                // Remove ".wh." prefix
                 if let Some(parent) = rel_path.parent() {
                     let deleted_path = extract_dir.join(parent).join(deleted_name);
                     if deleted_path.exists() {
@@ -308,7 +308,7 @@ pub fn extract_tar(tar_path: &Path, extract_dir: &Path) -> Result<()> {
             }
             _ => {
                 // Other entry types (char device, block device, fifo, etc.)
-                log::debug!("Skipping unsupported entry type: {:?}", entry_type);
+                log::debug!("Skipping unsupported entry type: {entry_type:?}");
             }
         }
     }

@@ -109,7 +109,7 @@ impl Notifier {
             _ => {
                 self.logger.log(
                     &Record::builder()
-                        .args(format_args!("{}", message))
+                        .args(format_args!("{message}"))
                         .level(Level::Info)
                         .target(module_path!())
                         .build(),
@@ -122,7 +122,7 @@ impl Notifier {
         if self.verbosity != VerbosityLevel::Quiet {
             self.logger.log(
                 &Record::builder()
-                    .args(format_args!("{}", message))
+                    .args(format_args!("{message}"))
                     .level(Level::Debug)
                     .target(module_path!())
                     .build(),
@@ -134,7 +134,7 @@ impl Notifier {
         if self.verbosity != VerbosityLevel::Quiet {
             self.logger.log(
                 &Record::builder()
-                    .args(format_args!("{}", message))
+                    .args(format_args!("{message}"))
                     .level(Level::Warn)
                     .target(module_path!())
                     .build(),
@@ -146,7 +146,7 @@ impl Notifier {
         if self.verbosity != VerbosityLevel::Quiet {
             self.logger.log(
                 &Record::builder()
-                    .args(format_args!("{}", message))
+                    .args(format_args!("{message}"))
                     .level(Level::Trace)
                     .target(module_path!())
                     .build(),
@@ -175,7 +175,7 @@ impl Notifier {
 
     pub fn progress(&self, current: u64, total: u64, message: &str) {
         if self.verbosity != VerbosityLevel::Quiet && (current % 100 == 0 || current == total) {
-            self.info(&format!("{}: {}/{}", message, current, total));
+            self.info(&format!("{message}: {current}/{total}"));
         }
     }
 

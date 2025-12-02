@@ -41,7 +41,7 @@ impl Source for NerdctlSource {
         // nerdctl uses docker-like naming
         // If no tag is specified, add "latest" as the default tag
         let normalized = if !image_name.contains(':') && !image_name.contains('@') {
-            format!("{}:latest", image_name)
+            format!("{image_name}:latest")
         } else {
             image_name.to_string()
         };
@@ -52,10 +52,10 @@ impl Source for NerdctlSource {
             .replace("@", "-");
 
         if let Some(short_digest) = super::extract_short_digest(image_digest) {
-            format!("{}#{}#{}", base_branch, os_arch, short_digest)
+            format!("{base_branch}#{os_arch}#{short_digest}")
         } else {
             // Fallback: use image_digest as-is if it doesn't have sha256: prefix
-            format!("{}#{}#{}", base_branch, os_arch, image_digest)
+            format!("{base_branch}#{os_arch}#{image_digest}")
         }
     }
 }
