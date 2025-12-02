@@ -713,10 +713,7 @@ mod tests {
             .zip(parsed_metadata.layer_digests.iter())
             .enumerate()
         {
-            assert_eq!(
-                parsed.digest, original.digest,
-                "Layer {i} digest mismatch"
-            );
+            assert_eq!(parsed.digest, original.digest, "Layer {i} digest mismatch");
             assert_eq!(
                 parsed.command, original.command,
                 "Layer {i} command mismatch"

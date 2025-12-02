@@ -9,9 +9,7 @@ fn test_extracted_image_eager_loading() {
 
     // Skip test if fixture doesn't exist
     if !fixture_path.exists() {
-        eprintln!(
-            "Skipping test: fixture file not found at {fixture_path:?}"
-        );
+        eprintln!("Skipping test: fixture file not found at {fixture_path:?}");
         return;
     }
 
@@ -46,10 +44,7 @@ fn test_extracted_image_eager_loading() {
     // Test that each layer has proper structure
     for (i, layer) in layers.iter().enumerate() {
         assert!(!layer.id.is_empty(), "Layer {i} should have an ID");
-        assert!(
-            !layer.command.is_empty(),
-            "Layer {i} should have a command"
-        );
+        assert!(!layer.command.is_empty(), "Layer {i} should have a command");
         assert!(!layer.digest.is_empty(), "Layer {i} should have a digest");
 
         // Verify digest and tarball path consistency
@@ -142,9 +137,7 @@ fn test_extracted_image_multiple_calls() {
     let fixture_path = Path::new("tests/integration/fixtures/oci2git-test.tar");
 
     if !fixture_path.exists() {
-        eprintln!(
-            "Skipping test: fixture file not found at {fixture_path:?}"
-        );
+        eprintln!("Skipping test: fixture file not found at {fixture_path:?}");
         return;
     }
 

@@ -111,9 +111,7 @@ mod tests {
     fn test_universal_tar_backend_with_fixture() -> Result<()> {
         // Skip if fixture tar doesn't exist
         if !Path::new(FIXTURE_TAR_PATH).exists() {
-            println!(
-                "Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}"
-            );
+            println!("Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}");
             return Ok(());
         }
 
@@ -131,9 +129,7 @@ mod tests {
         // This test verifies the universal tar processing backend can extract
         // files correctly - same logic used by all providers
         if !Path::new(FIXTURE_TAR_PATH).exists() {
-            println!(
-                "Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}"
-            );
+            println!("Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}");
             return Ok(());
         }
 
@@ -162,9 +158,7 @@ mod tests {
         // This test verifies the universal tar processing backend can extract
         // metadata correctly - same logic used by all providers
         if !Path::new(FIXTURE_TAR_PATH).exists() {
-            println!(
-                "Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}"
-            );
+            println!("Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}");
             return Ok(());
         }
 
@@ -190,9 +184,7 @@ mod tests {
         // This test verifies the universal tar processing backend creates
         // git repositories correctly - same logic used by all providers
         if !Path::new(FIXTURE_TAR_PATH).exists() {
-            println!(
-                "Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}"
-            );
+            println!("Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}");
             return Ok(());
         }
 
@@ -217,9 +209,7 @@ mod tests {
         const HARDLINK_FIXTURE: &str = "tests/integration/fixtures/hardlink-test-image.tar";
 
         if !Path::new(HARDLINK_FIXTURE).exists() {
-            println!(
-                "Skipping test: hardlink fixture not found at {HARDLINK_FIXTURE}"
-            );
+            println!("Skipping test: hardlink fixture not found at {HARDLINK_FIXTURE}");
             println!("To generate: docker build -f tests/integration/fixtures/hardlink-test.Dockerfile -t oci2git-hardlink-test:latest . && docker save oci2git-hardlink-test:latest -o tests/integration/fixtures/hardlink-test-image.tar");
             return Ok(());
         }
@@ -282,20 +272,17 @@ mod tests {
             let file_path = rootfs.join(file);
             // Use symlink_metadata to detect broken symlinks
             let exists = file_path.exists() || std::fs::symlink_metadata(&file_path).is_ok();
-            assert!(
-                exists,
-                "Expected file does not exist: {file}"
-            );
+            assert!(exists, "Expected file does not exist: {file}");
         }
-        println!("✓ All test files extracted successfully ({} files)", expected_files.len());
+        println!(
+            "✓ All test files extracted successfully ({} files)",
+            expected_files.len()
+        );
 
         // Verify hardlinked files have the same content
-        let original_content =
-            std::fs::read_to_string(rootfs.join("app/bin/original.sh"))?;
-        let hardlink1_content =
-            std::fs::read_to_string(rootfs.join("app/bin/hardlink1.sh"))?;
-        let hardlink2_content =
-            std::fs::read_to_string(rootfs.join("app/bin/hardlink2.sh"))?;
+        let original_content = std::fs::read_to_string(rootfs.join("app/bin/original.sh"))?;
+        let hardlink1_content = std::fs::read_to_string(rootfs.join("app/bin/hardlink1.sh"))?;
+        let hardlink2_content = std::fs::read_to_string(rootfs.join("app/bin/hardlink2.sh"))?;
 
         assert_eq!(original_content, hardlink1_content);
         assert_eq!(original_content, hardlink2_content);
@@ -303,8 +290,7 @@ mod tests {
         println!("✓ Hardlinked scripts have correct content");
 
         // Verify library hardlinks
-        let lib_original =
-            std::fs::read_to_string(rootfs.join("app/lib/libtest.so.1.0"))?;
+        let lib_original = std::fs::read_to_string(rootfs.join("app/lib/libtest.so.1.0"))?;
         let lib_link1 = std::fs::read_to_string(rootfs.join("app/lib/libtest.so.1"))?;
         let lib_link2 = std::fs::read_to_string(rootfs.join("app/lib/libtest.so"))?;
 
@@ -320,16 +306,22 @@ mod tests {
             if absolute_symlink.exists() {
                 let target = std::fs::read_link(&absolute_symlink)?;
                 // The symlink should point to an absolute path within rootfs
-                assert!(target.is_absolute(), "Symlink should be absolute: {target:?}");
-                assert!(target.to_string_lossy().contains("rootfs"),
-                    "Symlink should point to rootfs: {target:?}");
+                assert!(
+                    target.is_absolute(),
+                    "Symlink should be absolute: {target:?}"
+                );
+                assert!(
+                    target.to_string_lossy().contains("rootfs"),
+                    "Symlink should point to rootfs: {target:?}"
+                );
                 println!("✓ Absolute symlinks correctly point to rootfs");
             }
         }
 
         // Verify empty file hardlinks
         let empty_content = std::fs::read_to_string(rootfs.join("app/data/empty.txt"))?;
-        let empty_hardlink_content = std::fs::read_to_string(rootfs.join("app/data/empty-hardlink.txt"))?;
+        let empty_hardlink_content =
+            std::fs::read_to_string(rootfs.join("app/data/empty-hardlink.txt"))?;
         assert_eq!(empty_content, empty_hardlink_content);
         assert_eq!(empty_content, "");
         println!("✓ Empty file hardlinks work correctly");

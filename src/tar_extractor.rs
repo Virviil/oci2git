@@ -35,7 +35,10 @@ fn try_link_or_copy(target: &Path, dest: &Path) -> Result<()> {
         // 2. The target was replaced/removed in a previous layer
         // 3. The tar archive has broken hardlinks
         // We should skip this hardlink rather than failing
-        return Err(anyhow::anyhow!("hardlink target missing: {}", target.display()));
+        return Err(anyhow::anyhow!(
+            "hardlink target missing: {}",
+            target.display()
+        ));
     }
 
     // Remove destination if it already exists
@@ -53,8 +56,9 @@ fn try_link_or_copy(target: &Path, dest: &Path) -> Result<()> {
             target.display(),
             dest.display()
         );
-        fs::copy(target, dest)
-            .with_context(|| format!("Failed to copy {} to {}", target.display(), dest.display()))?;
+        fs::copy(target, dest).with_context(|| {
+            format!("Failed to copy {} to {}", target.display(), dest.display())
+        })?;
     }
 
     Ok(())
@@ -79,7 +83,8 @@ pub fn extract_tar(tar_path: &Path, extract_dir: &Path) -> Result<()> {
 
     let mut buf_reader = BufReader::new(file);
     let mut magic_bytes = [0u8; 2];
-    buf_reader.read_exact(&mut magic_bytes)
+    buf_reader
+        .read_exact(&mut magic_bytes)
         .context("Failed to read magic bytes from tar file")?;
 
     // Reopen the file since we consumed some bytes
@@ -103,8 +108,7 @@ pub fn extract_tar(tar_path: &Path, extract_dir: &Path) -> Result<()> {
         let header = entry.header();
         let entry_type = header.entry_type();
 
-        let tar_path = entry.path()
-            .context("Failed to get entry path")?;
+        let tar_path = entry.path().context("Failed to get entry path")?;
         let rel_path = normalize_tar_path(&tar_path);
 
         // Check for whiteout files (overlay filesystem markers)
@@ -114,7 +118,10 @@ pub fn extract_tar(tar_path: &Path, extract_dir: &Path) -> Result<()> {
                 if let Some(parent) = rel_path.parent() {
                     let opaque_dir = extract_dir.join(parent);
                     if opaque_dir.exists() && opaque_dir.is_dir() {
-                        log::debug!("Found opaque directory marker, clearing: {}", opaque_dir.display());
+                        log::debug!(
+                            "Found opaque directory marker, clearing: {}",
+                            opaque_dir.display()
+                        );
                         for entry in fs::read_dir(&opaque_dir)? {
                             let entry = entry?;
                             let path = entry.path();
@@ -133,7 +140,10 @@ pub fn extract_tar(tar_path: &Path, extract_dir: &Path) -> Result<()> {
                 if let Some(parent) = rel_path.parent() {
                     let deleted_path = extract_dir.join(parent).join(deleted_name);
                     if deleted_path.exists() {
-                        log::debug!("Found whiteout marker, deleting: {}", deleted_path.display());
+                        log::debug!(
+                            "Found whiteout marker, deleting: {}",
+                            deleted_path.display()
+                        );
                         if deleted_path.is_dir() {
                             fs::remove_dir_all(&deleted_path).ok();
                         } else {
@@ -155,7 +165,10 @@ pub fn extract_tar(tar_path: &Path, extract_dir: &Path) -> Result<()> {
 
             // Verify parent exists after creation
             if !parent.exists() {
-                anyhow::bail!("Parent directory doesn't exist after create_dir_all: {}", parent.display());
+                anyhow::bail!(
+                    "Parent directory doesn't exist after create_dir_all: {}",
+                    parent.display()
+                );
             }
 
             // Always set writable permissions on parent (simple and safe)
@@ -169,7 +182,10 @@ pub fn extract_tar(tar_path: &Path, extract_dir: &Path) -> Result<()> {
 
                 // Verify parent is actually a directory
                 if !parent.is_dir() {
-                    anyhow::bail!("Parent path exists but is not a directory: {}", parent.display());
+                    anyhow::bail!(
+                        "Parent path exists but is not a directory: {}",
+                        parent.display()
+                    );
                 }
             }
         }
@@ -197,7 +213,11 @@ pub fn extract_tar(tar_path: &Path, extract_dir: &Path) -> Result<()> {
                 // Delete existing file if it exists (overlay behavior)
                 // Use symlink_metadata to detect symlinks even if they're broken
                 if let Ok(metadata) = fs::symlink_metadata(&dest) {
-                    log::debug!("Removing existing entry at: {} (is_symlink: {})", dest.display(), metadata.is_symlink());
+                    log::debug!(
+                        "Removing existing entry at: {} (is_symlink: {})",
+                        dest.display(),
+                        metadata.is_symlink()
+                    );
                     if metadata.is_dir() && !metadata.is_symlink() {
                         fs::remove_dir_all(&dest).ok();
                     } else {
@@ -207,18 +227,19 @@ pub fn extract_tar(tar_path: &Path, extract_dir: &Path) -> Result<()> {
                 }
 
                 log::debug!("Creating file: {}", dest.display());
-                let mut out_file = File::create(&dest)
-                    .with_context(|| {
-                        let parent_info = if let Some(parent) = dest.parent() {
-                            format!(" (parent: {}, exists: {}, is_dir: {})",
-                                parent.display(),
-                                parent.exists(),
-                                parent.is_dir())
-                        } else {
-                            String::from(" (no parent)")
-                        };
-                        format!("Failed to create file: {}{}", dest.display(), parent_info)
-                    })?;
+                let mut out_file = File::create(&dest).with_context(|| {
+                    let parent_info = if let Some(parent) = dest.parent() {
+                        format!(
+                            " (parent: {}, exists: {}, is_dir: {})",
+                            parent.display(),
+                            parent.exists(),
+                            parent.is_dir()
+                        )
+                    } else {
+                        String::from(" (no parent)")
+                    };
+                    format!("Failed to create file: {}{}", dest.display(), parent_info)
+                })?;
 
                 std::io::copy(&mut entry, &mut out_file)
                     .with_context(|| format!("Failed to write file: {}", dest.display()))?;
@@ -231,7 +252,10 @@ pub fn extract_tar(tar_path: &Path, extract_dir: &Path) -> Result<()> {
                         // Ensure owner can read (add 0o400 if not present)
                         if mode & 0o400 == 0 {
                             mode |= 0o400;
-                            log::debug!("Fixed unreadable file during extraction: {}", dest.display());
+                            log::debug!(
+                                "Fixed unreadable file during extraction: {}",
+                                dest.display()
+                            );
                         }
                         let perms = fs::Permissions::from_mode(mode);
                         let _ = fs::set_permissions(&dest, perms);
@@ -239,7 +263,8 @@ pub fn extract_tar(tar_path: &Path, extract_dir: &Path) -> Result<()> {
                 }
             }
             tar::EntryType::Symlink => {
-                let link_name = header.link_name()
+                let link_name = header
+                    .link_name()
                     .context("Failed to get symlink target")?
                     .ok_or_else(|| anyhow::anyhow!("Symlink without target"))?;
 
@@ -289,22 +314,23 @@ pub fn extract_tar(tar_path: &Path, extract_dir: &Path) -> Result<()> {
 
                 #[cfg(not(unix))]
                 {
-                    log::warn!("Symlink support not implemented on this platform: {}", dest.display());
+                    log::warn!(
+                        "Symlink support not implemented on this platform: {}",
+                        dest.display()
+                    );
                 }
             }
             tar::EntryType::Link => {
                 // Hardlink - save for second pass
-                let link_name = header.link_name()
+                let link_name = header
+                    .link_name()
                     .context("Failed to get hardlink target")?
                     .ok_or_else(|| anyhow::anyhow!("Hardlink without target"))?;
 
                 let target_rel = normalize_tar_path(&link_name);
                 let target = extract_dir.join(&target_rel);
 
-                pending_hardlinks.push(PendingHardlink {
-                    dest,
-                    target,
-                });
+                pending_hardlinks.push(PendingHardlink { dest, target });
             }
             _ => {
                 // Other entry types (char device, block device, fifo, etc.)

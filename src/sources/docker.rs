@@ -50,9 +50,7 @@ impl DockerSource {
             return Err(anyhow!("Docker pull failed: {}", error));
         }
 
-        notifier.info(&format!(
-            "Successfully pulled Docker image '{image_name}'"
-        ));
+        notifier.info(&format!("Successfully pulled Docker image '{image_name}'"));
         Ok(())
     }
 }

@@ -106,9 +106,7 @@ mod tests {
     fn test_universal_tar_processing() -> Result<()> {
         // Skip if fixture tar doesn't exist
         if !Path::new(FIXTURE_TAR_PATH).exists() {
-            println!(
-                "Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}"
-            );
+            println!("Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}");
             return Ok(());
         }
 
@@ -121,9 +119,7 @@ mod tests {
     fn test_universal_file_extraction() -> Result<()> {
         // Skip if fixture tar doesn't exist
         if !Path::new(FIXTURE_TAR_PATH).exists() {
-            println!(
-                "Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}"
-            );
+            println!("Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}");
             return Ok(());
         }
 
@@ -150,9 +146,7 @@ mod tests {
     fn test_universal_metadata_extraction() -> Result<()> {
         // Skip if fixture tar doesn't exist
         if !Path::new(FIXTURE_TAR_PATH).exists() {
-            println!(
-                "Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}"
-            );
+            println!("Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}");
             return Ok(());
         }
 
@@ -178,9 +172,7 @@ mod tests {
     fn test_universal_git_structure() -> Result<()> {
         // Skip if fixture tar doesn't exist
         if !Path::new(FIXTURE_TAR_PATH).exists() {
-            println!(
-                "Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}"
-            );
+            println!("Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}");
             return Ok(());
         }
 
