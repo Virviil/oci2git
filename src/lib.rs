@@ -55,6 +55,7 @@ pub mod notifier;
 pub mod processor;
 pub mod sources;
 pub mod successor_navigator;
+pub mod tar_extractor;
 
 // Re-exports for easy access
 pub use extracted_image::{ExtractedImage, Layer};

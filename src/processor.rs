@@ -22,7 +22,6 @@ use crate::successor_navigator::SuccessorNavigator;
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
-use walkdir;
 
 /// Orchestrates the OCI image to Git repo conversion pipeline for a concrete [`Source`].
 ///
@@ -228,14 +227,11 @@ impl<S: Source> ImageProcessor<S> {
         // Process each layer in order (oldest to newest)
         // We'll process all layers from the history, but only extract the real layer tarballs
 
-        // Create a temporary directory for layer extraction
+        // Extract directly to the rootfs directory in the target output
         self.notifier.info("Preparing layer extraction...");
 
-        // Create a temporary directory for layer extraction and keep a reference to its path
-        let temp_layer_dir = tempfile::tempdir()?;
-        let temp_layer_path = temp_layer_dir.path().to_path_buf();
-        // Store the temp_dir to keep it alive until the end of the function
-        temp_dirs.push(temp_layer_dir);
+        // Extract layers directly to the target rootfs directory
+        let rootfs_path = rootfs_dir.clone();
 
         // Each layer now contains its own tarball path and digest information
         self.notifier.debug(&format!(
@@ -338,194 +334,11 @@ impl<S: Source> ImageProcessor<S> {
 
             self.notifier
                 .debug(&format!("Extracting tarball: {:?}", layer_tarball));
-            fs::create_dir_all(&temp_layer_path)?;
+            fs::create_dir_all(&rootfs_path)?;
 
-            // Extract the layer tarball to the temp directory
-            extracted_image.extract_layer_to(layer_tarball, &temp_layer_path)?;
-
-            // Recursively copy all files from the temp layer directory to rootfs
-            let entry_count = walkdir::WalkDir::new(&temp_layer_path)
-                .follow_links(false)
-                .into_iter()
-                .count();
-
-            self.notifier.info(&format!(
-                "Processing {} files in layer {}/{}",
-                entry_count,
-                i + 1,
-                layers.len()
-            ));
-
-            // Create a new progress bar if we have enough files
-            let file_progress = self.notifier.create_progress_bar(
-                entry_count as u64,
-                &format!("Files in layer {}/{}", i + 1, layers.len()),
-            );
-
-            let mut processed_files = 0;
-            for entry in walkdir::WalkDir::new(&temp_layer_path).follow_links(false) {
-                let entry = entry.context("Failed to read directory entry")?;
-                let source_path = entry.path();
-
-                processed_files += 1;
-                if let Some(pb) = &file_progress {
-                    if processed_files % 100 == 0 || processed_files == entry_count {
-                        pb.set_position(processed_files as u64);
-                    }
-                } else {
-                    self.notifier.progress(
-                        processed_files as u64,
-                        entry_count as u64,
-                        "Processing files",
-                    );
-                }
-
-                // Skip the temp directory itself
-                if source_path == temp_layer_path {
-                    continue;
-                }
-
-                let relative_path = source_path
-                    .strip_prefix(&temp_layer_path)
-                    .context("Failed to get relative path")?;
-
-                // Handle whiteout files (.wh. files in overlay fs)
-                let file_name = relative_path
-                    .file_name()
-                    .map(|s| s.to_string_lossy().to_string());
-
-                if let Some(name) = file_name {
-                    // Check for overlay whiteout files
-                    if name == ".wh..wh..opq" {
-                        // This is an opaque directory marker - contents should be hidden
-                        let parent_dir = relative_path
-                            .parent()
-                            .unwrap_or_else(|| std::path::Path::new(""));
-                        let opaque_dir = rootfs_dir.join(parent_dir);
-
-                        // If the opaque directory exists, we need to remove all its contents
-                        // but keep the directory itself
-                        if opaque_dir.exists() && opaque_dir.is_dir() {
-                            self.notifier.debug(&format!(
-                                "Found opaque directory marker for {:?}",
-                                parent_dir
-                            ));
-
-                            // Remove all entries in the directory
-                            for path in std::fs::read_dir(&opaque_dir)
-                                .unwrap_or_else(|_| std::fs::read_dir(".").unwrap())
-                                .flatten()
-                                .map(|entry| entry.path())
-                            {
-                                if path.is_dir() {
-                                    fs::remove_dir_all(&path).ok();
-                                } else {
-                                    fs::remove_file(&path).ok();
-                                }
-                            }
-                        }
-
-                        // Skip processing the marker file itself
-                        continue;
-                    } else if name.starts_with(".wh.") {
-                        // This is a whiteout file - the file it refers to should be deleted
-                        let deleted_name = name.strip_prefix(".wh.").unwrap();
-                        let parent_dir = relative_path
-                            .parent()
-                            .unwrap_or_else(|| std::path::Path::new(""));
-                        let deleted_path = rootfs_dir.join(parent_dir).join(deleted_name);
-
-                        self.notifier
-                            .debug(&format!("Found whiteout marker for {:?}", deleted_path));
-
-                        // Remove the file or directory that this whiteout refers to
-                        if deleted_path.exists() {
-                            if deleted_path.is_dir() {
-                                fs::remove_dir_all(&deleted_path).ok();
-                            } else {
-                                fs::remove_file(&deleted_path).ok();
-                            }
-                        }
-
-                        // Skip processing the whiteout file itself
-                        continue;
-                    }
-                }
-
-                let target_path = rootfs_dir.join(relative_path);
-
-                // Handle different file types
-                if source_path.is_symlink() {
-                    let link_target = std::fs::read_link(source_path)?;
-
-                    // Delete the target if it exists (we're replacing files from previous layers)
-                    if target_path.exists() {
-                        if target_path.is_dir() && !target_path.is_symlink() {
-                            fs::remove_dir_all(&target_path).ok();
-                        } else {
-                            fs::remove_file(&target_path).ok();
-                        }
-                    }
-
-                    // Create parent directory
-                    if let Some(parent) = target_path.parent() {
-                        fs::create_dir_all(parent).ok();
-                    }
-
-                    // Create the symlink
-                    if let Err(err) = std::os::unix::fs::symlink(&link_target, &target_path) {
-                        if err.kind() == std::io::ErrorKind::PermissionDenied {
-                            self.notifier.warn(&format!(
-                                "Permission denied creating symlink {:?} -> {:?} - skipping",
-                                target_path, link_target
-                            ));
-                        }
-                    }
-                } else if source_path.is_dir() {
-                    // Create the directory
-                    if let Err(err) = fs::create_dir_all(&target_path) {
-                        if err.kind() == std::io::ErrorKind::PermissionDenied {
-                            self.notifier.warn(&format!(
-                                "Permission denied creating directory {:?} - skipping",
-                                target_path
-                            ));
-                        }
-                    }
-                } else if source_path.is_file() {
-                    // Delete the target if it exists (we're replacing files from previous layers)
-                    if target_path.exists() {
-                        if target_path.is_dir() && !target_path.is_symlink() {
-                            fs::remove_dir_all(&target_path).ok();
-                        } else {
-                            fs::remove_file(&target_path).ok();
-                        }
-                    }
-
-                    // Create parent directory
-                    if let Some(parent) = target_path.parent() {
-                        fs::create_dir_all(parent).ok();
-                    }
-
-                    // Copy the file
-                    if let Err(err) = fs::copy(source_path, &target_path) {
-                        if err.kind() == std::io::ErrorKind::PermissionDenied {
-                            self.notifier.warn(&format!(
-                                "Permission denied copying {:?} - skipping",
-                                source_path
-                            ));
-                        }
-                    }
-                }
-            }
-
-            // Finish the progress bar when done
-            if let Some(pb) = file_progress {
-                pb.finish_and_clear();
-            }
-
-            // Clear the temp directory for the next layer
-            fs::remove_dir_all(&temp_layer_path).ok();
-            fs::create_dir_all(&temp_layer_path)?;
+            // Extract the layer tarball directly to rootfs
+            // tar_extractor now handles: whiteouts, hardlinks, permission fixing, overlay behavior
+            extracted_image.extract_layer_to(layer_tarball, &rootfs_path)?;
 
             // Track non-empty layer with digest
             // Use the current length of the digest tracker as the new position

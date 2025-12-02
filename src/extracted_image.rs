@@ -31,12 +31,11 @@
 
 use crate::metadata::{self, ImageMetadata};
 use crate::notifier::Notifier;
+use crate::tar_extractor;
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
-use std::fs::{self, File};
-use std::io::Read;
+use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 #[derive(Debug, Clone)]
 pub struct Layer {
@@ -127,38 +126,8 @@ impl ExtractedImage {
     }
 
     fn extract_tar_file(tar_path: &Path, extract_dir: &Path) -> Result<()> {
-        // Try to detect if the file is gzip compressed by checking the magic bytes
-        let mut file_for_detection = File::open(tar_path)?;
-        let mut magic_bytes = [0u8; 2];
-        file_for_detection.read_exact(&mut magic_bytes)?;
-
-        let mut cmd = Command::new("tar");
-
-        if magic_bytes == [0x1f, 0x8b] {
-            // This is a gzip file
-            cmd.arg("-xzf");
-        } else {
-            // This is a plain tar file
-            cmd.arg("-xf");
-        }
-
-        cmd.arg(tar_path).arg("-C").arg(extract_dir);
-
-        let output = cmd.output().context(format!(
-            "Failed to run tar command for file: {:?}",
-            tar_path
-        ))?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow::anyhow!(
-                "Failed to extract tar file {:?}: {}",
-                tar_path,
-                stderr
-            ));
-        }
-
-        Ok(())
+        tar_extractor::extract_tar(tar_path, extract_dir)
+            .context(format!("Failed to extract tar file: {:?}", tar_path))
     }
 
     fn load_metadata_from_dir(extract_dir: &Path, image_name: &str) -> Result<ImageMetadata> {

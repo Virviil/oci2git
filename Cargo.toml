@@ -26,6 +26,7 @@ oci-spec = { version = "0.8.1", features = ["image"] }
 indicatif = "0.17"
 log = "0.4"
 env_logger = "0.11"
+tar-rs = { package = "tar", version = "0.4" }
 
 [features]
 # default = ["nerdctl", "docker"]
