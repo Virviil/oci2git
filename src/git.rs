@@ -107,7 +107,7 @@ impl GitRepo {
 
                 // Set HEAD to point to the new branch
                 self.repo
-                    .set_head(&format!("refs/heads/{}", branch_name))
+                    .set_head(&format!("refs/heads/{branch_name}"))
                     .context("Failed to set HEAD to new branch")?;
 
                 // Hard reset working directory to match the target commit
@@ -123,7 +123,7 @@ impl GitRepo {
                 // Create orphaned branch by just setting HEAD to point to the new branch
                 // The branch will be created when the first commit is made
                 self.repo
-                    .set_head(&format!("refs/heads/{}", branch_name))
+                    .set_head(&format!("refs/heads/{branch_name}"))
                     .context("Failed to set HEAD to new branch")?;
             }
         }
@@ -511,8 +511,7 @@ mod tests {
         let commit_count = repo.get_commit_count().unwrap();
         assert!(
             commit_count >= 2,
-            "Expected at least 2 commits, got {}",
-            commit_count
+            "Expected at least 2 commits, got {commit_count}"
         );
     }
 

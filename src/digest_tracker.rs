@@ -126,7 +126,7 @@ impl DigestTracker {
             layer_id.to_string()
         } else {
             // Assume it's just the hash part
-            format!("sha256:{}", layer_id)
+            format!("sha256:{layer_id}")
         }
     }
 
@@ -139,7 +139,7 @@ impl DigestTracker {
             if parent.file_name().map(|s| s.to_str()) == Some(Some("sha256")) {
                 // This is a blob path like "blobs/sha256/digest"
                 if let Some(digest) = path.file_name().and_then(|s| s.to_str()) {
-                    return format!("sha256:{}", digest);
+                    return format!("sha256:{digest}");
                 }
             }
         }
@@ -149,7 +149,7 @@ impl DigestTracker {
             if filename.starts_with("sha256:") {
                 filename.to_string()
             } else {
-                format!("sha256:{}", filename)
+                format!("sha256:{filename}")
             }
         } else {
             "unknown".to_string()

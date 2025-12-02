@@ -102,7 +102,7 @@ mod tests {
 
         // The result will depend on TarSource implementation
         // Some implementations might resolve relative paths, others might not
-        println!("Relative path result: {:?}", result);
+        println!("Relative path result: {result:?}");
 
         Ok(())
     }
@@ -111,10 +111,7 @@ mod tests {
     fn test_universal_tar_backend_with_fixture() -> Result<()> {
         // Skip if fixture tar doesn't exist
         if !Path::new(FIXTURE_TAR_PATH).exists() {
-            println!(
-                "Skipping test: fixture tar file not found at {}",
-                FIXTURE_TAR_PATH
-            );
+            println!("Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}");
             return Ok(());
         }
 
@@ -132,10 +129,7 @@ mod tests {
         // This test verifies the universal tar processing backend can extract
         // files correctly - same logic used by all providers
         if !Path::new(FIXTURE_TAR_PATH).exists() {
-            println!(
-                "Skipping test: fixture tar file not found at {}",
-                FIXTURE_TAR_PATH
-            );
+            println!("Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}");
             return Ok(());
         }
 
@@ -164,10 +158,7 @@ mod tests {
         // This test verifies the universal tar processing backend can extract
         // metadata correctly - same logic used by all providers
         if !Path::new(FIXTURE_TAR_PATH).exists() {
-            println!(
-                "Skipping test: fixture tar file not found at {}",
-                FIXTURE_TAR_PATH
-            );
+            println!("Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}");
             return Ok(());
         }
 
@@ -193,10 +184,7 @@ mod tests {
         // This test verifies the universal tar processing backend creates
         // git repositories correctly - same logic used by all providers
         if !Path::new(FIXTURE_TAR_PATH).exists() {
-            println!(
-                "Skipping test: fixture tar file not found at {}",
-                FIXTURE_TAR_PATH
-            );
+            println!("Skipping test: fixture tar file not found at {FIXTURE_TAR_PATH}");
             return Ok(());
         }
 
@@ -212,6 +200,150 @@ mod tests {
         tar_processing::verify_git_structure(output_dir.path())?;
 
         println!("✓ Universal tar backend correctly creates git repository");
+        Ok(())
+    }
+
+    #[test]
+    fn test_tar_with_hardlinks() -> Result<()> {
+        // Test extraction of Docker image with hardlinks
+        const HARDLINK_FIXTURE: &str = "tests/integration/fixtures/hardlink-test-image.tar";
+
+        if !Path::new(HARDLINK_FIXTURE).exists() {
+            println!("Skipping test: hardlink fixture not found at {HARDLINK_FIXTURE}");
+            println!("To generate: docker build -f tests/integration/fixtures/hardlink-test.Dockerfile -t oci2git-hardlink-test:latest . && docker save oci2git-hardlink-test:latest -o tests/integration/fixtures/hardlink-test-image.tar");
+            return Ok(());
+        }
+
+        let output_dir = TempDir::new()?;
+        let tar_source = TarSource::new()?;
+        let notifier = Notifier::new(0);
+        let processor = ImageProcessor::new(tar_source, notifier);
+
+        println!("Converting image with hardlinks...");
+        processor.convert(HARDLINK_FIXTURE, output_dir.path())?;
+
+        // Verify the git repo was created
+        assert!(output_dir.path().join(".git").exists());
+        println!("✓ Git repository created");
+
+        // Files are extracted to rootfs subdirectory
+        let rootfs = output_dir.path().join("rootfs");
+        assert!(rootfs.exists(), "rootfs directory should exist");
+
+        // Check if all test files exist (hardlinks, symlinks, empty files, directories)
+        let expected_files = vec![
+            // Test 1: Regular files with hardlinks
+            "app/bin/original.sh",
+            "app/bin/hardlink1.sh",
+            "app/bin/hardlink2.sh",
+            // Test 2: Library files with hardlinks
+            "app/lib/libtest.so.1.0",
+            "app/lib/libtest.so.1",
+            "app/lib/libtest.so",
+            // Test 3 & 4: Symlinks (relative and absolute)
+            "app/bin/relative-symlink.sh",
+            "app/bin/absolute-symlink.sh",
+            // Test 5: Empty files with hardlinks and symlinks
+            "app/data/empty.txt",
+            "app/data/empty-hardlink.txt",
+            "app/data/empty-symlink.txt",
+            // Test 6: Symlink chain
+            "app/bin/symlink-chain.sh",
+            // Test 7 & 8: Directory symlinks
+            "app/links/dir-symlink",
+            "app/links/dir-symlink-absolute",
+            "app/target_dir/file.txt",
+            // Test 9: Broken symlink
+            "app/links/broken-symlink.txt",
+            // Test 10: Multiple hardlinks to empty file
+            "app/data/empty2.txt",
+            "app/data/empty2-link1.txt",
+            "app/data/empty2-link2.txt",
+            "app/data/empty2-link3.txt",
+            // Test 11: File with content and multiple links
+            "app/data/file1.txt",
+            "app/data/file1-hardlink.txt",
+            "app/data/file1-symlink.txt",
+            // Test 12: Relative symlink pointing up
+            "app/data/relative-up-symlink.sh",
+        ];
+
+        for file in &expected_files {
+            let file_path = rootfs.join(file);
+            // Use symlink_metadata to detect broken symlinks
+            let exists = file_path.exists() || std::fs::symlink_metadata(&file_path).is_ok();
+            assert!(exists, "Expected file does not exist: {file}");
+        }
+        println!(
+            "✓ All test files extracted successfully ({} files)",
+            expected_files.len()
+        );
+
+        // Verify hardlinked files have the same content
+        let original_content = std::fs::read_to_string(rootfs.join("app/bin/original.sh"))?;
+        let hardlink1_content = std::fs::read_to_string(rootfs.join("app/bin/hardlink1.sh"))?;
+        let hardlink2_content = std::fs::read_to_string(rootfs.join("app/bin/hardlink2.sh"))?;
+
+        assert_eq!(original_content, hardlink1_content);
+        assert_eq!(original_content, hardlink2_content);
+        assert!(original_content.contains("Hello from original"));
+        println!("✓ Hardlinked scripts have correct content");
+
+        // Verify library hardlinks
+        let lib_original = std::fs::read_to_string(rootfs.join("app/lib/libtest.so.1.0"))?;
+        let lib_link1 = std::fs::read_to_string(rootfs.join("app/lib/libtest.so.1"))?;
+        let lib_link2 = std::fs::read_to_string(rootfs.join("app/lib/libtest.so"))?;
+
+        assert_eq!(lib_original, lib_link1);
+        assert_eq!(lib_original, lib_link2);
+        assert_eq!(lib_original, "Library content v1\n");
+        println!("✓ Library hardlinks have correct content");
+
+        // Verify absolute symlinks point to correct location
+        #[cfg(unix)]
+        {
+            let absolute_symlink = rootfs.join("app/bin/absolute-symlink.sh");
+            if absolute_symlink.exists() {
+                let target = std::fs::read_link(&absolute_symlink)?;
+                // The symlink should point to an absolute path within rootfs
+                assert!(
+                    target.is_absolute(),
+                    "Symlink should be absolute: {target:?}"
+                );
+                assert!(
+                    target.to_string_lossy().contains("rootfs"),
+                    "Symlink should point to rootfs: {target:?}"
+                );
+                println!("✓ Absolute symlinks correctly point to rootfs");
+            }
+        }
+
+        // Verify empty file hardlinks
+        let empty_content = std::fs::read_to_string(rootfs.join("app/data/empty.txt"))?;
+        let empty_hardlink_content =
+            std::fs::read_to_string(rootfs.join("app/data/empty-hardlink.txt"))?;
+        assert_eq!(empty_content, empty_hardlink_content);
+        assert_eq!(empty_content, "");
+        println!("✓ Empty file hardlinks work correctly");
+
+        // Verify multiple hardlinks to same empty file
+        let empty2_1 = std::fs::read_to_string(rootfs.join("app/data/empty2.txt"))?;
+        let empty2_2 = std::fs::read_to_string(rootfs.join("app/data/empty2-link1.txt"))?;
+        let empty2_3 = std::fs::read_to_string(rootfs.join("app/data/empty2-link2.txt"))?;
+        assert_eq!(empty2_1, empty2_2);
+        assert_eq!(empty2_1, empty2_3);
+        println!("✓ Multiple hardlinks to empty file work correctly");
+
+        // Verify file with multiple link types
+        let file1_content = std::fs::read_to_string(rootfs.join("app/data/file1.txt"))?;
+        let file1_hardlink = std::fs::read_to_string(rootfs.join("app/data/file1-hardlink.txt"))?;
+        let file1_symlink = std::fs::read_to_string(rootfs.join("app/data/file1-symlink.txt"))?;
+        assert_eq!(file1_content, "Data file 1\n");
+        assert_eq!(file1_content, file1_hardlink);
+        assert_eq!(file1_content, file1_symlink);
+        println!("✓ Mixed hardlinks and symlinks work correctly");
+
+        println!("✅ All comprehensive link extraction tests passed!");
         Ok(())
     }
 }

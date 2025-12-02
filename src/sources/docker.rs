@@ -18,7 +18,7 @@ impl DockerSource {
         let output = Command::new("docker")
             .args(args)
             .output()
-            .context(format!("Failed to execute docker command: {:?}", args))?;
+            .context(format!("Failed to execute docker command: {args:?}"))?;
 
         if !output.status.success() {
             let error = String::from_utf8_lossy(&output.stderr);
@@ -38,7 +38,7 @@ impl DockerSource {
     }
 
     fn pull_image(&self, image_name: &str, notifier: &Notifier) -> Result<()> {
-        notifier.info(&format!("Pulling Docker image '{}'...", image_name));
+        notifier.info(&format!("Pulling Docker image '{image_name}'..."));
 
         let output = Command::new("docker")
             .args(["pull", image_name])
@@ -50,10 +50,7 @@ impl DockerSource {
             return Err(anyhow!("Docker pull failed: {}", error));
         }
 
-        notifier.info(&format!(
-            "Successfully pulled Docker image '{}'",
-            image_name
-        ));
+        notifier.info(&format!("Successfully pulled Docker image '{image_name}'"));
         Ok(())
     }
 }
@@ -74,8 +71,7 @@ impl Source for DockerSource {
 
         // Use docker save to export the full image with all layers
         notifier.info(&format!(
-            "Exporting Docker image '{}' to tarball...",
-            image_name
+            "Exporting Docker image '{image_name}' to tarball..."
         ));
 
         // Try to save the image first
@@ -91,21 +87,19 @@ impl Source for DockerSource {
                 // Save failed - check if it's because the image doesn't exist
                 if !self.image_exists(image_name) {
                     notifier.info(&format!(
-                        "Image '{}' not found locally, attempting to pull...",
-                        image_name
+                        "Image '{image_name}' not found locally, attempting to pull..."
                     ));
 
                     // Try to pull the image
                     self.pull_image(image_name, notifier)
-                        .context(format!("Failed to pull image '{}'", image_name))?;
+                        .context(format!("Failed to pull image '{image_name}'"))?;
 
                     // Retry the save command after successful pull
                     notifier.info(&format!(
-                        "Retrying export of Docker image '{}' to tarball...",
-                        image_name
+                        "Retrying export of Docker image '{image_name}' to tarball..."
                     ));
                     self.run_command(&["save", "-o", tarball_path.to_str().unwrap(), image_name])
-                        .context(format!("Failed to save image '{}' after pull", image_name))?;
+                        .context(format!("Failed to save image '{image_name}' after pull"))?;
 
                     Ok((tarball_path, Some(temp_dir)))
                 } else {
