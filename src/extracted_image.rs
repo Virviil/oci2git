@@ -30,12 +30,14 @@
 //! Temporary extraction is scoped to the instance lifetime via `tempfile::TempDir`.
 
 use crate::metadata::{self, ImageMetadata};
-use crate::notifier::Notifier;
-use crate::tar_extractor;
+use crate::notifier::AnyNotifier;
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
-use std::fs;
+use std::fs::{self, File};
+use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use tar::Archive;
 
 #[derive(Debug, Clone)]
 pub struct Layer {
@@ -43,7 +45,7 @@ pub struct Layer {
     pub command: String,
     pub created_at: DateTime<Utc>,
     pub is_empty: bool,
-    pub tarball_path: Option<std::path::PathBuf>, // Some for non-empty layers, None for empty layers
+    pub tarball_path: Option<PathBuf>, // Some for non-empty layers, None for empty layers
     pub digest: String, // Always present - either tarball digest or "empty" for empty layers
     pub comment: Option<String>, // Comment from image layer history
 }
@@ -56,34 +58,93 @@ pub struct ExtractedImage {
 }
 
 impl ExtractedImage {
-    pub fn from_tarball<P: AsRef<Path>>(tarball_path: P, notifier: &Notifier) -> Result<Self> {
+    // Quiet helper used by from_tarball (no bar unless you pass Some(&pb))
+    fn extract_tar_file(tar_path: &Path, extract_dir: &Path) -> Result<()> {
+        // Try to detect if the file is gzip compressed by checking the magic bytes
+        let mut file_for_detection = File::open(tar_path)?;
+        let mut magic_bytes = [0u8; 2];
+        file_for_detection.read_exact(&mut magic_bytes)?;
+
+        let mut cmd = Command::new("tar");
+
+        if magic_bytes == [0x1f, 0x8b] {
+            // This is a gzip file
+            cmd.arg("-xzf");
+        } else {
+            // This is a plain tar file
+            cmd.arg("-xf");
+        }
+
+        cmd.arg(tar_path).arg("-C").arg(extract_dir);
+
+        let output = cmd.output().context(format!(
+            "Failed to run tar command for file: {:?}",
+            tar_path
+        ))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow::anyhow!(
+                "Failed to extract tar file {:?}: {}",
+                tar_path,
+                stderr
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub fn unpack_tar_with_progress(
+        tar_path: &Path,
+        out: &Path,
+        notifier: &AnyNotifier,
+    ) -> anyhow::Result<()> {
+        let file = File::open(tar_path)?;
+        let total = file.metadata()?.len();
+
+        let pb = notifier.create_progress_bar(total, &format!("Image {}", tar_path.display()));
+        // // wrap the reader so reads advance the bar
+        let reader = BufReader::new(file);
+        let reader: Box<dyn Read> = if let Some(ref pb) = pb {
+            Box::new(pb.wrap_read(reader))
+        } else {
+            Box::new(reader)
+        };
+
+        let mut ar = Archive::new(reader);
+        ar.unpack(out)?;
+
+        if let Some(pb) = pb {
+            pb.finish_and_clear();
+        }
+
+        Ok(())
+    }
+
+    pub fn from_tarball<P: AsRef<Path>>(tarball_path: P, notifier: &AnyNotifier) -> Result<Self> {
         let tarball_path = tarball_path.as_ref();
 
-        notifier.debug(&format!("Extracting image tarball: {tarball_path:?}"));
-
-        // Create a temporary directory for extraction
         let temp_dir = tempfile::tempdir().context("Failed to create temporary directory")?;
         let extract_dir = temp_dir.path().join("extracted");
         fs::create_dir_all(&extract_dir)?;
 
-        // Extract the tarball
-        Self::extract_tar_file(tarball_path, &extract_dir)?;
-
-        // Verify the extracted content has the expected OCI structure
-        let manifest_path = extract_dir.join("manifest.json");
-        if !manifest_path.exists() {
-            return Err(anyhow!(
-        "Invalid image tarball: manifest.json not found. This does not appear to be a valid OCI/Docker image tarball."
-      ));
+        match notifier {
+            AnyNotifier::Enhanced(_) => {
+                Self::unpack_tar_with_progress(tarball_path, &extract_dir, notifier)?;
+            }
+            AnyNotifier::Simple(_) => {
+                Self::unpack_tar_with_progress(tarball_path, &extract_dir, notifier)?;
+            }
         }
 
-        // Load metadata and layers using static helper methods
+        let manifest_path = extract_dir.join("manifest.json");
+        if !manifest_path.exists() {
+            return Err(anyhow!("Invalid image tarball: manifest.json not found."));
+        }
         notifier.debug("Loading image metadata...");
         let metadata = Self::load_metadata_from_dir(&extract_dir, "temp")?;
-
         notifier.debug("Loading image layers...");
         let layers = Self::load_layers_from_dir(&extract_dir)?;
-
         notifier.info(&format!("Successfully loaded {} layers", layers.len()));
 
         Ok(ExtractedImage {
@@ -94,6 +155,16 @@ impl ExtractedImage {
         })
     }
 
+    pub fn extract_layer_to<P: AsRef<Path>>(
+        &self,
+        layer_tarball: &Path,
+        output_dir: P,
+    ) -> Result<()> {
+        let output_dir = output_dir.as_ref();
+        fs::create_dir_all(output_dir)?;
+
+        Self::extract_tar_file(layer_tarball, output_dir)
+    }
     pub fn metadata(&self, _image_name: &str) -> Result<ImageMetadata> {
         // Return the metadata as-is, keeping the proper SHA digest as ID
         Ok(self.metadata.clone())
@@ -111,23 +182,8 @@ impl ExtractedImage {
         Ok(self.layers.clone())
     }
 
-    pub fn extract_layer_to<P: AsRef<Path>>(
-        &self,
-        layer_tarball: &Path,
-        output_dir: P,
-    ) -> Result<()> {
-        let output_dir = output_dir.as_ref();
-        fs::create_dir_all(output_dir)?;
-        Self::extract_tar_file(layer_tarball, output_dir)
-    }
-
     pub fn extract_dir(&self) -> &Path {
         &self.extract_dir
-    }
-
-    fn extract_tar_file(tar_path: &Path, extract_dir: &Path) -> Result<()> {
-        tar_extractor::extract_tar(tar_path, extract_dir)
-            .context(format!("Failed to extract tar file: {tar_path:?}"))
     }
 
     fn load_metadata_from_dir(extract_dir: &Path, image_name: &str) -> Result<ImageMetadata> {
@@ -151,7 +207,7 @@ impl ExtractedImage {
         // Read the config file as JSON
         let config_path = extract_dir.join(config_file);
         let config_content = fs::read_to_string(&config_path)
-            .context(format!("Failed to read config file: {config_file}"))?;
+            .context(format!("Failed to read config file: {}", config_file))?;
 
         // Parse as OCI ImageConfiguration
         let config: oci_spec::image::ImageConfiguration =
@@ -180,9 +236,9 @@ impl ExtractedImage {
         // Fallback: Extract digest from config file path (format: blobs/sha256/HASH)
         if metadata.id.is_empty() {
             if let Some(digest_hash) = config_file.strip_prefix("blobs/sha256/") {
-                metadata.id = format!("sha256:{digest_hash}");
+                metadata.id = format!("sha256:{}", digest_hash);
             } else if let Some(digest_hash) = config_file.strip_suffix(".json") {
-                metadata.id = format!("sha256:{digest_hash}");
+                metadata.id = format!("sha256:{}", digest_hash);
             }
         }
 
@@ -199,7 +255,7 @@ impl ExtractedImage {
             let path = PathBuf::from(image_name);
             if let Some(filename) = path.file_stem() {
                 if let Some(name) = filename.to_str() {
-                    metadata.repo_tags.push(format!("{name}:latest"));
+                    metadata.repo_tags.push(format!("{}:latest", name));
                 }
             }
         }
@@ -228,7 +284,7 @@ impl ExtractedImage {
         // Read the config file as JSON
         let config_path = extract_dir.join(config_file);
         let config_content = fs::read_to_string(&config_path)
-            .context(format!("Failed to read config file: {config_file}"))?;
+            .context(format!("Failed to read config file: {}", config_file))?;
 
         let config: serde_json::Value =
             serde_json::from_str(&config_content).context("Failed to parse image configuration")?;
@@ -302,7 +358,7 @@ impl ExtractedImage {
                 let id = tarball
                     .file_name()
                     .map(|name| name.to_string_lossy().to_string())
-                    .unwrap_or_else(|| format!("layer-{i}"));
+                    .unwrap_or_else(|| format!("layer-{}", i));
 
                 // Extract digest from tarball path
                 let digest =
@@ -311,7 +367,7 @@ impl ExtractedImage {
                 (id, Some(tarball.clone()), digest)
             } else {
                 // Empty layer or no tarball available
-                let id = format!("<empty-layer-{i}>");
+                let id = format!("<empty-layer-{}>", i);
                 let digest = if is_empty {
                     "empty".to_string()
                 } else {

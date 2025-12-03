@@ -1,10 +1,10 @@
 use anyhow::{anyhow, Context, Result};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::TempDir;
 
 use super::Source;
-use crate::notifier::Notifier;
+use crate::notifier::AnyNotifier;
 
 pub struct NerdctlSource;
 
@@ -28,10 +28,18 @@ impl Source for NerdctlSource {
         "nerdctl"
     }
 
+    fn estimate_image_size(_image: &str) -> Option<u64> {
+        todo!()
+    }
+
+    fn image_save_with_progress(_image: &str, _tar_path: &Path) -> Result<()> {
+        todo!()
+    }
+
     fn get_image_tarball(
         &self,
         _image_name: &str,
-        _notifier: &Notifier,
+        _notifier: &AnyNotifier,
     ) -> Result<(PathBuf, Option<TempDir>)> {
         // This will be implemented in the future
         unimplemented!("nerdctl support is not yet implemented")

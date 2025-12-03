@@ -6,7 +6,6 @@
 
 use crate::integration::common::tar_processing;
 use anyhow::Result;
-use oci2git::notifier::Notifier;
 use oci2git::processor::ImageProcessor;
 use oci2git::sources::{Source, TarSource};
 use std::io::Write;
@@ -16,6 +15,7 @@ use tempfile::{NamedTempFile, TempDir};
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oci2git::notifier::{AnyNotifier, NotifierFlavor};
 
     const FIXTURE_TAR_PATH: &str = "tests/integration/fixtures/oci2git-test.tar";
 
@@ -36,7 +36,7 @@ mod tests {
         let temp_path = temp_file.path().to_str().unwrap();
 
         let tar_source = TarSource::new().expect("Should create TarSource");
-        let notifier = Notifier::new(0);
+        let notifier = AnyNotifier::new(NotifierFlavor::Simple, 0);
         let result = tar_source.get_image_tarball(temp_path, &notifier);
 
         assert!(
@@ -66,7 +66,7 @@ mod tests {
     fn test_tar_source_with_nonexistent_file() {
         let tar_source = TarSource::new().expect("Should create TarSource");
         let nonexistent_path = "/path/that/definitely/does/not/exist.tar";
-        let notifier = Notifier::new(0);
+        let notifier = AnyNotifier::new(NotifierFlavor::Simple, 0);
 
         let result = tar_source.get_image_tarball(nonexistent_path, &notifier);
 
@@ -97,7 +97,7 @@ mod tests {
         let file_name = temp_file.path().file_name().unwrap().to_str().unwrap();
 
         let tar_source = TarSource::new().expect("Should create TarSource");
-        let notifier = Notifier::new(0);
+        let notifier = AnyNotifier::new(NotifierFlavor::Simple, 0);
         let result = tar_source.get_image_tarball(file_name, &notifier);
 
         // The result will depend on TarSource implementation
@@ -135,7 +135,7 @@ mod tests {
 
         let output_dir = TempDir::new()?;
         let tar_source = TarSource::new()?;
-        let notifier = Notifier::new(0);
+        let notifier = AnyNotifier::new(NotifierFlavor::Simple, 0);
         let processor = ImageProcessor::new(tar_source, notifier);
 
         // Process through universal backend
@@ -164,7 +164,7 @@ mod tests {
 
         let output_dir = TempDir::new()?;
         let tar_source = TarSource::new()?;
-        let notifier = Notifier::new(0);
+        let notifier = AnyNotifier::new(NotifierFlavor::Simple, 0);
         let processor = ImageProcessor::new(tar_source, notifier);
 
         // Process through universal backend
@@ -190,7 +190,7 @@ mod tests {
 
         let output_dir = TempDir::new()?;
         let tar_source = TarSource::new()?;
-        let notifier = Notifier::new(0);
+        let notifier = AnyNotifier::new(NotifierFlavor::Simple, 0);
         let processor = ImageProcessor::new(tar_source, notifier);
 
         // Process through universal backend
@@ -216,7 +216,7 @@ mod tests {
 
         let output_dir = TempDir::new()?;
         let tar_source = TarSource::new()?;
-        let notifier = Notifier::new(0);
+        let notifier = AnyNotifier::new(NotifierFlavor::Simple, 0);
         let processor = ImageProcessor::new(tar_source, notifier);
 
         println!("Converting image with hardlinks...");
@@ -335,12 +335,34 @@ mod tests {
         println!("✓ Multiple hardlinks to empty file work correctly");
 
         // Verify file with multiple link types
-        let file1_content = std::fs::read_to_string(rootfs.join("app/data/file1.txt"))?;
-        let file1_hardlink = std::fs::read_to_string(rootfs.join("app/data/file1-hardlink.txt"))?;
-        let file1_symlink = std::fs::read_to_string(rootfs.join("app/data/file1-symlink.txt"))?;
+        let file1 = rootfs.join("app/data/file1.txt");
+        let file1_hardlink = rootfs.join("app/data/file1-hardlink.txt");
+        let file1_symlink_path = rootfs.join("app/data/file1-symlink.txt");
+
+        let file1_content = std::fs::read_to_string(&file1)?;
+        let file1_hardlink_content = std::fs::read_to_string(&file1_hardlink)?;
         assert_eq!(file1_content, "Data file 1\n");
-        assert_eq!(file1_content, file1_hardlink);
-        assert_eq!(file1_content, file1_symlink);
+        assert_eq!(file1_content, file1_hardlink_content);
+
+        #[cfg(unix)]
+        {
+            use std::path::{Path, PathBuf};
+
+            // Inspect the symlink itself
+            let link_target = std::fs::read_link(&file1_symlink_path)?;
+            // It should be an absolute container path
+            assert_eq!(
+                link_target,
+                Path::new("/app/data/file1.txt"),
+                "Unexpected target for file1-symlink.txt: {link_target:?}"
+            );
+
+            // Interpret container-absolute target under rootfs
+            let effective_target: PathBuf = rootfs.join(link_target.strip_prefix("/").unwrap());
+            let effective_content = std::fs::read_to_string(effective_target)?;
+            assert_eq!(file1_content, effective_content);
+        }
+
         println!("✓ Mixed hardlinks and symlinks work correctly");
 
         println!("✅ All comprehensive link extraction tests passed!");

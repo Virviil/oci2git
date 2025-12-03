@@ -5,7 +5,8 @@
 //! functionality that's shared across all sources.
 
 use anyhow::Result;
-use oci2git::notifier::Notifier;
+use oci2git::notifier::AnyNotifier;
+use oci2git::notifier::NotifierFlavor;
 use oci2git::processor::ImageProcessor;
 use oci2git::sources::Source;
 use std::fs;
@@ -15,7 +16,7 @@ use tempfile::TempDir;
 /// Test helper: Process any tar file and verify basic structure
 pub fn test_basic_tar_processing<S: Source>(source: S, tar_path: &str) -> Result<()> {
     let output_dir = TempDir::new()?;
-    let notifier = Notifier::new(0);
+    let notifier = AnyNotifier::new(NotifierFlavor::Simple, 0);
     let processor = ImageProcessor::new(source, notifier);
 
     // Process the tar file
@@ -125,7 +126,7 @@ mod tests {
 
         let output_dir = TempDir::new()?;
         let tar_source = TarSource::new()?;
-        let notifier = Notifier::new(0);
+        let notifier = AnyNotifier::new(NotifierFlavor::Simple, 0);
         let processor = ImageProcessor::new(tar_source, notifier);
 
         // Process the image
@@ -152,7 +153,7 @@ mod tests {
 
         let output_dir = TempDir::new()?;
         let tar_source = TarSource::new()?;
-        let notifier = Notifier::new(0);
+        let notifier = AnyNotifier::new(NotifierFlavor::Simple, 0);
         let processor = ImageProcessor::new(tar_source, notifier);
 
         // Process the image
@@ -178,7 +179,7 @@ mod tests {
 
         let output_dir = TempDir::new()?;
         let tar_source = TarSource::new()?;
-        let notifier = Notifier::new(0);
+        let notifier = AnyNotifier::new(NotifierFlavor::Simple, 0);
         let processor = ImageProcessor::new(tar_source, notifier);
 
         // Process the image

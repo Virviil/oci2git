@@ -3,7 +3,7 @@ use flate2::read::GzDecoder;
 use std::fs::{self, File};
 use std::io::{BufReader, Read};
 use std::path::{Component, Path, PathBuf};
-use tar_rs as tar;
+// use tar_rs as tar;
 
 /// Normalizes a path from a tar archive to be safe for extraction
 /// Removes any attempts to escape the root directory

@@ -1,13 +1,20 @@
 use anyhow::Result;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
-use crate::notifier::Notifier;
+use crate::notifier::AnyNotifier;
 
 /// Source trait for getting OCI images from different container sources
 pub trait Source {
     /// Returns the name of the source for identification purposes
     fn name(&self) -> &str;
+    /// Best-effort estimate using `docker image inspect {{.Size}}`.
+    fn estimate_image_size(image: &str) -> Option<u64>;
+    /// Stream `docker save` -> file with live progress.
+    /// - No deadlocks, no giant buffering
+    /// - Safe (writes to .partial then renames)
+    ///
+    fn image_save_with_progress(image: &str, tar_path: &Path) -> Result<()>;
 
     /// Retrieves an OCI image tarball and returns the path to it along with temp directory if created
     /// The image_name parameter can be an image reference (for registry sources)
@@ -18,7 +25,7 @@ pub trait Source {
     fn get_image_tarball(
         &self,
         image_name: &str,
-        notifier: &Notifier,
+        notifier: &AnyNotifier,
     ) -> Result<(PathBuf, Option<TempDir>)>;
 
     /// Generates a Git branch name from the image name/path

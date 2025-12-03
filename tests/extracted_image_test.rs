@@ -1,5 +1,5 @@
 use oci2git::extracted_image::ExtractedImage;
-use oci2git::Notifier;
+use oci2git::notifier::{AnyNotifier, NotifierFlavor};
 use std::path::Path;
 
 #[test]
@@ -12,8 +12,7 @@ fn test_extracted_image_eager_loading() {
         eprintln!("Skipping test: fixture file not found at {fixture_path:?}");
         return;
     }
-
-    let notifier = Notifier::new(0); // Verbosity level 0 for quiet
+    let notifier = AnyNotifier::new(NotifierFlavor::Simple, 0);
 
     // Test that from_tarball does all the work upfront
     let extracted_image = ExtractedImage::from_tarball(fixture_path, &notifier)
@@ -121,7 +120,7 @@ fn test_extracted_image_eager_loading() {
 
 #[test]
 fn test_extracted_image_validation() {
-    let notifier = Notifier::new(0);
+    let notifier = AnyNotifier::new(NotifierFlavor::Simple, 0);
 
     // Test with non-existent file
     let result = ExtractedImage::from_tarball("non-existent-file.tar", &notifier);
@@ -141,7 +140,7 @@ fn test_extracted_image_multiple_calls() {
         return;
     }
 
-    let notifier = Notifier::new(0);
+    let notifier = AnyNotifier::new(NotifierFlavor::Simple, 0);
     let extracted_image = ExtractedImage::from_tarball(fixture_path, &notifier)
         .expect("Failed to extract image from tarball");
 
