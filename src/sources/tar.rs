@@ -1,9 +1,9 @@
 use anyhow::{anyhow, Result};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 use super::Source;
-use crate::notifier::Notifier;
+use crate::notifier::AnyNotifier;
 
 /// Extracts filename from a tar path and sanitizes it for Git branch naming
 /// Removes file extension and sanitizes problematic characters
@@ -31,10 +31,18 @@ impl Source for TarSource {
         "tar"
     }
 
+    fn estimate_image_size(_image: &str) -> Option<u64> {
+        todo!()
+    }
+
+    fn image_save_with_progress(_image: &str, _tar_path: &Path) -> Result<()> {
+        todo!()
+    }
+
     fn get_image_tarball(
         &self,
         image_path: &str,
-        notifier: &Notifier,
+        notifier: &AnyNotifier,
     ) -> Result<(PathBuf, Option<TempDir>)> {
         // For tar source, image_path is the path to the existing tarball
         let tarball_path = PathBuf::from(image_path);
