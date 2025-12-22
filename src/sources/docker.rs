@@ -22,7 +22,7 @@ impl DockerSource {
 
         if !output.status.success() {
             let error = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow!("Docker command failed: {}", error));
+            return Err(anyhow!("Docker command failed: {error}"));
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
@@ -47,7 +47,7 @@ impl DockerSource {
 
         if !output.status.success() {
             let error = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow!("Docker pull failed: {}", error));
+            return Err(anyhow!("Docker pull failed: {error}"));
         }
 
         notifier.info(&format!("Successfully pulled Docker image '{image_name}'"));

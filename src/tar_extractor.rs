@@ -100,8 +100,8 @@ pub fn extract_tar(tar_path: &Path, extract_dir: &Path) -> Result<()> {
 
     // First pass: extract all regular files, directories, and symlinks
     // Store hardlinks and failed symlinks for second pass
-    let mut pending_hardlinks = Vec::new();
-    let mut pending_symlinks = Vec::new();
+    let mut pending_hardlinks: Vec<PendingHardlink> = Vec::new();
+    let mut pending_symlinks: Vec<PendingSymlink> = Vec::new();
 
     for entry_result in archive.entries()? {
         let mut entry = entry_result.context("Failed to read tar entry")?;

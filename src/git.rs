@@ -340,7 +340,7 @@ impl GitRepo {
             }
             None => {
                 // File doesn't exist in this commit
-                Err(anyhow::anyhow!("File '{}' not found in commit", file_path))
+                Err(anyhow::anyhow!("File '{file_path}' not found in commit"))
             }
         }
     }
