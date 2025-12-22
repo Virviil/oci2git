@@ -1,0 +1,257 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - name: Get version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+
+  build-release:
+    name: Build Release
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            asset_name: oci2git-linux-x86_64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            asset_name: oci2git-linux-aarch64
+          - target: x86_64-apple-darwin
+            os: macos-13
+            asset_name: oci2git-darwin-x86_64
+          - target: aarch64-apple-darwin
+            os: macos-14
+            asset_name: oci2git-darwin-aarch64
+          - target: x86_64-pc-windows-gnu
+            os: ubuntu-latest
+            asset_name: oci2git-windows-x86_64.exe
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Install cross-compilation tools (Windows)
+        if: matrix.target == 'x86_64-pc-windows-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-mingw-w64-x86-64
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }}
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: x86_64-w64-mingw32-gcc
+
+      - name: Strip binary (Unix)
+        if: matrix.os != 'windows-latest' && matrix.target != 'aarch64-unknown-linux-gnu'
+        run: strip target/${{ matrix.target }}/release/oci2git
+
+      - name: Prepare binary
+        run: |
+          mkdir -p dist
+          if [[ "${{ matrix.target }}" == *"windows"* ]]; then
+            cp target/${{ matrix.target }}/release/oci2git.exe dist/${{ matrix.asset_name }}
+          else
+            cp target/${{ matrix.target }}/release/oci2git dist/${{ matrix.asset_name }}
+          fi
+
+      - name: Create tarball
+        run: |
+          cd dist
+          tar czf ${{ matrix.asset_name }}.tar.gz ${{ matrix.asset_name }}
+          sha256sum ${{ matrix.asset_name }}.tar.gz > ${{ matrix.asset_name }}.tar.gz.sha256
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./dist/${{ matrix.asset_name }}.tar.gz
+          asset_name: ${{ matrix.asset_name }}.tar.gz
+          asset_content_type: application/gzip
+
+      - name: Upload Checksum
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./dist/${{ matrix.asset_name }}.tar.gz.sha256
+          asset_name: ${{ matrix.asset_name }}.tar.gz.sha256
+          asset_content_type: text/plain
+
+      - name: Save artifacts for packaging
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: dist/
+
+  build-deb:
+    name: Build Debian Package
+    needs: [create-release, build-release]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Linux x86_64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-x86_64-unknown-linux-gnu
+          path: ./dist-x86_64
+
+      - name: Download Linux ARM64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-aarch64-unknown-linux-gnu
+          path: ./dist-aarch64
+
+      - name: Install packaging tools
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev
+
+      - name: Build Debian package (amd64)
+        run: |
+          VERSION="${{ needs.create-release.outputs.version }}"
+          ARCH="amd64"
+          PKG_NAME="oci2git_${VERSION}_${ARCH}"
+
+          mkdir -p "${PKG_NAME}/DEBIAN"
+          mkdir -p "${PKG_NAME}/usr/bin"
+          mkdir -p "${PKG_NAME}/usr/share/doc/oci2git"
+
+          # Copy binary
+          cp dist-x86_64/oci2git-linux-x86_64 "${PKG_NAME}/usr/bin/oci2git"
+          chmod 755 "${PKG_NAME}/usr/bin/oci2git"
+
+          # Copy README if exists
+          [ -f README.md ] && cp README.md "${PKG_NAME}/usr/share/doc/oci2git/"
+
+          # Create control file
+          cat > "${PKG_NAME}/DEBIAN/control" << EOF
+          Package: oci2git
+          Version: ${VERSION}
+          Section: utils
+          Priority: optional
+          Architecture: ${ARCH}
+          Maintainer: Dmitry Rubinstein <rubinsteindb@gmail.com>
+          Description: A tool to convert OCI images to Git repositories
+           oci2git converts OCI/Docker images into Git repositories,
+           making it easier to track and version container images.
+          Homepage: https://github.com/virviil/oci2git
+          EOF
+
+          # Build package
+          dpkg-deb --build "${PKG_NAME}"
+
+      - name: Build Debian package (arm64)
+        run: |
+          VERSION="${{ needs.create-release.outputs.version }}"
+          ARCH="arm64"
+          PKG_NAME="oci2git_${VERSION}_${ARCH}"
+
+          mkdir -p "${PKG_NAME}/DEBIAN"
+          mkdir -p "${PKG_NAME}/usr/bin"
+          mkdir -p "${PKG_NAME}/usr/share/doc/oci2git"
+
+          # Copy binary
+          cp dist-aarch64/oci2git-linux-aarch64 "${PKG_NAME}/usr/bin/oci2git"
+          chmod 755 "${PKG_NAME}/usr/bin/oci2git"
+
+          # Copy README if exists
+          [ -f README.md ] && cp README.md "${PKG_NAME}/usr/share/doc/oci2git/"
+
+          # Create control file
+          cat > "${PKG_NAME}/DEBIAN/control" << EOF
+          Package: oci2git
+          Version: ${VERSION}
+          Section: utils
+          Priority: optional
+          Architecture: ${ARCH}
+          Maintainer: Dmitry Rubinstein <rubinsteindb@gmail.com>
+          Description: A tool to convert OCI images to Git repositories
+           oci2git converts OCI/Docker images into Git repositories,
+           making it easier to track and version container images.
+          Homepage: https://github.com/virviil/oci2git
+          EOF
+
+          # Build package
+          dpkg-deb --build "${PKG_NAME}"
+
+      - name: Generate checksums
+        run: |
+          sha256sum oci2git_*.deb > checksums.txt
+
+      - name: Upload Debian package (amd64)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./oci2git_${{ needs.create-release.outputs.version }}_amd64.deb
+          asset_name: oci2git_${{ needs.create-release.outputs.version }}_amd64.deb
+          asset_content_type: application/vnd.debian.binary-package
+
+      - name: Upload Debian package (arm64)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./oci2git_${{ needs.create-release.outputs.version }}_arm64.deb
+          asset_name: oci2git_${{ needs.create-release.outputs.version }}_arm64.deb
+          asset_content_type: application/vnd.debian.binary-package
+
+      - name: Upload checksums
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./checksums.txt
+          asset_name: debian-checksums.txt
+          asset_content_type: text/plain

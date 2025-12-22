@@ -1,0 +1,16 @@
+pkgbase = oci2git-bin
+	pkgdesc = A tool to convert OCI images to Git repositories
+	pkgver = 0.2.4
+	pkgrel = 1
+	url = https://github.com/virviil/oci2git
+	arch = x86_64
+	arch = aarch64
+	license = MIT
+	provides = oci2git
+	conflicts = oci2git
+	source_x86_64 = https://github.com/virviil/oci2git/releases/download/v0.2.4/oci2git-linux-x86_64.tar.gz
+	sha256sums_x86_64 = REPLACE_WITH_X86_64_SHA256
+	source_aarch64 = https://github.com/virviil/oci2git/releases/download/v0.2.4/oci2git-linux-aarch64.tar.gz
+	sha256sums_aarch64 = REPLACE_WITH_AARCH64_SHA256
+
+pkgname = oci2git-bin
