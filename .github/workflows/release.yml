@@ -3,8 +3,8 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
-  workflow_dispatch:
+      - "v*"
+  workflow_dispatch: {}
 
 env:
   CARGO_TERM_COLOR: always
