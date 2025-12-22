@@ -83,7 +83,7 @@ fn main() -> Result<()> {
             notifier.debug("Initializing Docker source");
 
             let source = DockerSource::new()
-                .map_err(|e| anyhow!("Failed to initialize Docker source: {}", e))?;
+                .map_err(|e| anyhow!("Failed to initialize Docker source: {e}"))?;
 
             let processor = ImageProcessor::new(source, notifier);
             processor.convert(&cli.image, &cli.output)?;
@@ -96,7 +96,7 @@ fn main() -> Result<()> {
             notifier.debug("Initializing nerdctl source");
 
             let source = NerdctlSource::new()
-                .map_err(|e| anyhow!("Failed to initialize nerdctl source: {}", e))?;
+                .map_err(|e| anyhow!("Failed to initialize nerdctl source: {e}"))?;
 
             let processor = ImageProcessor::new(source, notifier);
             processor.convert(&cli.image, &cli.output)?;
@@ -109,7 +109,7 @@ fn main() -> Result<()> {
             notifier.debug("Initializing tar source");
 
             let source =
-                TarSource::new().map_err(|e| anyhow!("Failed to initialize tar source: {}", e))?;
+                TarSource::new().map_err(|e| anyhow!("Failed to initialize tar source: {e}"))?;
 
             let processor = ImageProcessor::new(source, notifier);
             processor.convert(&cli.image, &cli.output)?;
