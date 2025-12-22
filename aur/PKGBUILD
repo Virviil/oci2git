@@ -1,0 +1,24 @@
+# Maintainer: Dmitry Rubinstein <rubinsteindb@gmail.com>
+pkgname=oci2git-bin
+pkgver=0.2.4
+pkgrel=1
+pkgdesc="A tool to convert OCI images to Git repositories"
+arch=('x86_64' 'aarch64')
+url="https://github.com/virviil/oci2git"
+license=('MIT')
+provides=('oci2git')
+conflicts=('oci2git')
+source_x86_64=("${url}/releases/download/v${pkgver}/oci2git-linux-x86_64.tar.gz")
+source_aarch64=("${url}/releases/download/v${pkgver}/oci2git-linux-aarch64.tar.gz")
+sha256sums_x86_64=('REPLACE_WITH_X86_64_SHA256')
+sha256sums_aarch64=('REPLACE_WITH_AARCH64_SHA256')
+
+package() {
+  cd "$srcdir"
+
+  if [ "$CARCH" = "x86_64" ]; then
+    install -Dm755 oci2git-linux-x86_64 "$pkgdir/usr/bin/oci2git"
+  elif [ "$CARCH" = "aarch64" ]; then
+    install -Dm755 oci2git-linux-aarch64 "$pkgdir/usr/bin/oci2git"
+  fi
+}
