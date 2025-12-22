@@ -1057,7 +1057,7 @@ dependencies = [
 
 [[package]]
 name = "oci2git"
-version = "0.2.3"
+version = "0.2.5"
 dependencies = [
  "anyhow",
  "atty",
