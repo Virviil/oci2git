@@ -1,6 +1,6 @@
 [package]
 name = "oci2git"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2021"
 authors = ["Dmitry Rubinstein <rubinsteindb@gmail.com>"]
 description = "A tool to convert OCI images to Git repositories"
