@@ -1,14 +1,21 @@
+use crate::ProgressStyle::{Enhanced, Simple};
 use anyhow::{anyhow, Result};
 use clap::{Parser, ValueEnum};
+use oci2git::notifier::{AnyNotifier, NotifierFlavor};
+use oci2git::{DockerSource, ImageProcessor, NerdctlSource, TarSource};
 use std::path::PathBuf;
-
-use oci2git::{DockerSource, ImageProcessor, NerdctlSource, Notifier, TarSource};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 enum Engine {
     Docker,
     Nerdctl,
     Tar,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+enum ProgressStyle {
+    Simple,
+    Enhanced,
 }
 
 #[derive(Parser)]
@@ -39,6 +46,15 @@ struct Cli {
     #[arg(
         short,
         long,
+        value_enum,
+        default_value = "enhanced",
+        help = "Progress style mode (default is enhanced, use `simple` for returning to simple mode)"
+    )]
+    progress: ProgressStyle,
+
+    #[arg(
+        short,
+        long,
         action = clap::ArgAction::Count,
         help = "Verbose mode (-v for info, -vv for debug, -vvv for trace). Also switches to text-based progress"
     )]
@@ -47,16 +63,16 @@ struct Cli {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    let notifier_flavor = match cli.progress {
+        Simple => NotifierFlavor::Simple,
+        Enhanced => NotifierFlavor::Enhanced,
+    };
 
-    // Create notifier with verbosity level
-    let notifier = Notifier::new(cli.verbose);
+    let notifier = AnyNotifier::new(notifier_flavor, cli.verbose);
+    notifier.info(&format!("Progress style: {:?}", cli.progress));
 
     notifier.debug(&format!("Output directory: {}", cli.output.display()));
     notifier.debug(&format!("Engine: {:?}", cli.engine));
-    notifier.debug(&format!(
-        "Beautiful progress: {}",
-        notifier.use_beautiful_progress()
-    ));
 
     match cli.engine {
         Engine::Docker => {
