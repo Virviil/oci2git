@@ -174,7 +174,9 @@ impl Notifier {
     }
 
     pub fn progress(&self, current: u64, total: u64, message: &str) {
-        if self.verbosity != VerbosityLevel::Quiet && (current % 100 == 0 || current == total) {
+        if self.verbosity != VerbosityLevel::Quiet
+            && (current.is_multiple_of(100) || current == total)
+        {
             self.info(&format!("{message}: {current}/{total}"));
         }
     }

@@ -196,16 +196,29 @@ fn scan_archive<R: std::io::Read>(
         match header.entry_type() {
             EntryType::Regular => {
                 let size = header.size().unwrap_or(0);
-                entries.push(FsEntry::File { path, size, mode, stat });
+                entries.push(FsEntry::File {
+                    path,
+                    size,
+                    mode,
+                    stat,
+                });
             }
             EntryType::Link => {
-                entries.push(FsEntry::Hardlink { path, target: link_target(), stat });
+                entries.push(FsEntry::Hardlink {
+                    path,
+                    target: link_target(),
+                    stat,
+                });
             }
             EntryType::Directory => {
                 entries.push(FsEntry::Directory { path, mode, stat });
             }
             EntryType::Symlink => {
-                entries.push(FsEntry::Symlink { path, target: link_target(), stat });
+                entries.push(FsEntry::Symlink {
+                    path,
+                    target: link_target(),
+                    stat,
+                });
             }
             _ => {
                 // Skip other entry types (block/char devices, fifos, etc.)
@@ -234,7 +247,12 @@ impl FsBom {
             } else {
                 for entry in &layer.entries {
                     match entry {
-                        FsEntry::File { path, size, mode, stat } => {
+                        FsEntry::File {
+                            path,
+                            size,
+                            mode,
+                            stat,
+                        } => {
                             writeln!(out, "      - type: file").unwrap();
                             writeln!(out, "        path: {:?}", path).unwrap();
                             writeln!(out, "        size: {size}").unwrap();

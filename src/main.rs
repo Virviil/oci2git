@@ -51,9 +51,7 @@ enum Commands {
 
     /// Generate a YAML filesystem bill of materials
     Fsbom {
-        #[arg(
-            help = "Image name (e.g., ubuntu:latest) or path to tarball when using tar engine"
-        )]
+        #[arg(help = "Image name (e.g., ubuntu:latest) or path to tarball when using tar engine")]
         image: String,
 
         #[arg(

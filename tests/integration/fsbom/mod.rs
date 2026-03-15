@@ -56,7 +56,10 @@ mod tests {
         let (_dir, path) = run_fsbom()?;
         assert!(path.exists(), "output YAML should exist");
         let content = std::fs::read_to_string(&path)?;
-        assert!(content.starts_with("layers:"), "YAML should start with 'layers:'");
+        assert!(
+            content.starts_with("layers:"),
+            "YAML should start with 'layers:'"
+        );
         println!("✓ fsbom YAML created");
         Ok(())
     }
@@ -118,7 +121,10 @@ mod tests {
         // Both should be recorded as type: symlink
         // Count symlink entries
         let symlink_count = content.matches("type: symlink").count();
-        assert!(symlink_count >= 2, "expected at least 2 symlink entries, got {symlink_count}");
+        assert!(
+            symlink_count >= 2,
+            "expected at least 2 symlink entries, got {symlink_count}"
+        );
         println!("✓ symlinks present in layer 3 ({symlink_count} total symlinks)");
         Ok(())
     }
@@ -155,7 +161,10 @@ mod tests {
 
         // hello.txt appears first in layer 2 as new, then again in layer 4 as modified
         let hello_count = content.matches(r#""app/hello.txt""#).count();
-        assert_eq!(hello_count, 2, "hello.txt should appear twice (new + modified), got {hello_count}");
+        assert_eq!(
+            hello_count, 2,
+            "hello.txt should appear twice (new + modified), got {hello_count}"
+        );
 
         // Find the second occurrence and check stat is "m:..."
         let second_pos = content
@@ -183,7 +192,10 @@ mod tests {
 
         // static.txt is deleted in layer 4 via whiteout — should appear only once (layer 2)
         let count = content.matches(r#""app/static.txt""#).count();
-        assert_eq!(count, 1, "static.txt deleted in layer 4 should appear only once, got {count}");
+        assert_eq!(
+            count, 1,
+            "static.txt deleted in layer 4 should appear only once, got {count}"
+        );
         println!("✓ deleted file (static.txt) absent from later layers");
         Ok(())
     }
@@ -201,9 +213,7 @@ mod tests {
             "new.txt added in layer 4 should be in BOM"
         );
         // Should be marked as new
-        let pos = content
-            .find(r#""app/new.txt""#)
-            .expect("new.txt in BOM");
+        let pos = content.find(r#""app/new.txt""#).expect("new.txt in BOM");
         let end = (pos + 200).min(content.len());
         let after = &content[pos..end];
         assert!(
@@ -224,7 +234,10 @@ mod tests {
 
         for i in 0..4 {
             let expected = format!("- index: {i}");
-            assert!(content.contains(&expected), "missing '- index: {i}' in YAML");
+            assert!(
+                content.contains(&expected),
+                "missing '- index: {i}' in YAML"
+            );
         }
         println!("✓ layer indices are sequential 0..3");
         Ok(())
