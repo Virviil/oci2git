@@ -14,12 +14,14 @@
 
 use crate::digest_tracker::DigestTracker;
 use crate::extracted_image::ExtractedImage;
+use crate::fsbom::{self, FsBom, LayerBom};
 use crate::git::GitRepo;
 use crate::image_metadata::ImageMetadata;
 use crate::notifier::Notifier;
 use crate::sources::Source;
 use crate::successor_navigator::SuccessorNavigator;
 use anyhow::{Context, Result};
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
@@ -378,6 +380,85 @@ impl<S: Source> ImageProcessor<S> {
             output_dir.display()
         );
         self.notifier.info(&msg);
+
+        Ok(())
+    }
+
+    /// Generate a YAML filesystem bill of materials for an image.
+    ///
+    /// Scans layer tarballs read-only (no extraction to disk, no git repo needed).
+    /// Produces a YAML file at `output_path` listing all files introduced or modified
+    /// per layer, with `new`/`modified` status.
+    ///
+    /// # Parameters
+    /// - `image_name`: image reference understood by the configured [`Source`].
+    /// - `output_path`: path where the YAML BOM file will be written.
+    pub fn generate_fsbom(&self, image_name: &str, output_path: &Path) -> Result<()> {
+        self.notifier.info(&format!(
+            "Generating filesystem BOM for image '{}' using {} source",
+            image_name,
+            self.source.name()
+        ));
+
+        let mut temp_dirs: Vec<tempfile::TempDir> = Vec::new();
+
+        let (tarball_path, tarball_temp_dir) =
+            self.source.get_image_tarball(image_name, &self.notifier)?;
+        if let Some(td) = tarball_temp_dir {
+            temp_dirs.push(td);
+        }
+
+        self.notifier.info("Extracting image tarball...");
+        let extracted_image = ExtractedImage::from_tarball(&tarball_path, &self.notifier)?;
+
+        let layers = extracted_image.layers()?;
+        self.notifier
+            .debug(&format!("Found {} layers", layers.len()));
+
+        let mut seen_paths: HashSet<String> = HashSet::new();
+        let mut layer_boms: Vec<LayerBom> = Vec::new();
+
+        for (i, layer) in layers.iter().enumerate() {
+            self.notifier.info(&format!(
+                "Scanning layer {}/{}: {}",
+                i + 1,
+                layers.len(),
+                layer.command
+            ));
+
+            let bom = if let Some(ref tarball) = layer.tarball_path {
+                fsbom::scan_layer(
+                    tarball,
+                    &mut seen_paths,
+                    i,
+                    layer.command.clone(),
+                    layer.digest.clone(),
+                )?
+            } else {
+                LayerBom {
+                    index: i,
+                    command: layer.command.clone(),
+                    digest: layer.digest.clone(),
+                    entries: vec![],
+                }
+            };
+
+            layer_boms.push(bom);
+        }
+
+        let bom = FsBom { layers: layer_boms };
+
+        if let Some(parent) = output_path.parent() {
+            if !parent.as_os_str().is_empty() {
+                fs::create_dir_all(parent)?;
+            }
+        }
+        bom.save_yaml(output_path)?;
+
+        self.notifier.info(&format!(
+            "Filesystem BOM written to '{}'",
+            output_path.display()
+        ));
 
         Ok(())
     }

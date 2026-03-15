@@ -46,7 +46,7 @@
 <div align="left"> </div>  
 </div>
 
-A Rust application that converts container images (Docker, etc.) to Git repositories. Each container layer is represented as a Git commit, preserving the history and structure of the original image.
+A Rust application that converts container images (Docker, etc.) to Git repositories, and generates filesystem bill of materials (fsbom) in YAML. Each container layer is represented as a Git commit, preserving the history and structure of the original image.
 
 ![Demo of OCI2Git converting the nginx image](./assets/nginx.gif)
 
@@ -54,6 +54,7 @@ A Rust application that converts container images (Docker, etc.) to Git reposito
 
 - Analyze Docker images and extract layer information
 - Create a Git repository where each image layer is represented as a commit
+- Generate a YAML filesystem bill of materials (fsbom) with per-layer file listings
 - Support for empty layers (ENV, WORKDIR, etc.) as empty commits
 - Complete metadata extraction to Markdown format
 - Extensible architecture for supporting different container engines
@@ -208,32 +209,53 @@ cargo install --path .
 
 ## Usage
 
-```bash
+```
 oci2git [OPTIONS] <IMAGE>
+oci2git convert [OPTIONS] <IMAGE>
+oci2git fsbom [OPTIONS] <IMAGE>
 ```
 
-Arguments:
-  `<IMAGE>`  Image name to convert (e.g., 'ubuntu:latest') or path to tarball when using the tar engine
+### `convert` — OCI image → Git repository
+
+```bash
+oci2git convert [OPTIONS] <IMAGE>
+# or simply:
+oci2git <IMAGE>
+```
 
 Options:
-  `-o, --output <o>`  Output directory for Git repository [default: ./container_repo]
+  `-o, --output <OUTPUT>`  Output directory for Git repository [default: ./container_repo]
   `-e, --engine <ENGINE>`  Container engine to use (docker, nerdctl, tar) [default: docker]
-  `-h, --help`            Print help information
-  `-V, --version`         Print version information
+  `-v, --verbose`          Verbose mode (-v for info, -vv for debug, -vvv for trace)
+
+### `fsbom` — Filesystem bill of materials
+
+```bash
+oci2git fsbom [OPTIONS] <IMAGE>
+```
+
+Options:
+  `-o, --output <OUTPUT>`  Output path for the YAML BOM file [default: ./fsbom.yml]
+  `-e, --engine <ENGINE>`  Container engine to use (docker, nerdctl, tar) [default: docker]
+  `-v, --verbose`          Verbose mode (-v for info, -vv for debug, -vvv for trace)
 
 Environment Variables:
   `TMPDIR`  Set this environment variable to change the default location used for intermediate data processing. This is platform-dependent (e.g., `TMPDIR` on Unix/macOS, `TEMP` or `TMP` on Windows).
 
 ## Examples
 
+### Convert
+
 Using Docker engine (default):
 ```bash
-oci2git -o ./ubuntu-repo ubuntu:latest
+oci2git ubuntu:latest
+# or explicitly:
+oci2git convert ubuntu:latest -o ./ubuntu-repo
 ```
 
 Using an already downloaded image tarball:
 ```bash
-oci2git -e tar -o ./ubuntu-repo /path/to/ubuntu-latest.tar
+oci2git convert -e tar -o ./ubuntu-repo /path/to/ubuntu-latest.tar
 ```
 
 The tar engine expects a valid OCI format tarball, which is typically created with `docker save`:
@@ -242,7 +264,7 @@ The tar engine expects a valid OCI format tarball, which is typically created wi
 docker save -o ubuntu-latest.tar ubuntu:latest
 
 # Convert the tarball to a Git repository
-oci2git -e tar -o ./ubuntu-repo ubuntu-latest.tar
+oci2git convert -e tar -o ./ubuntu-repo ubuntu-latest.tar
 ```
 
 This will create a Git repository in `./ubuntu-repo` containing:
@@ -253,6 +275,55 @@ The Git history reflects the container's layer history:
 - The first commit contains only the `Image.md` file with full metadata
 - Each subsequent commit represents a layer from the original image
 - Commits include the Dockerfile command as the commit message
+
+### Filesystem Bill of Materials (fsbom)
+
+Generate a YAML listing of every file introduced or modified per layer:
+```bash
+oci2git fsbom ubuntu:latest -o ubuntu.yml
+```
+
+Using a tarball:
+```bash
+oci2git fsbom -e tar image.tar -o image-bom.yml
+```
+
+The output YAML lists every layer with its entries tagged by type (`file`, `hardlink`, `symlink`, `directory`) and status (`n:uid:gid` for new, `m:uid:gid` for modified). Deleted files (OCI whiteouts) are excluded.
+
+```yaml
+layers:
+  - index: 0
+    command: "ADD rootfs.tar.gz / # buildkit"
+    digest: "sha256:45f3ea58..."
+    entries:
+      - type: file
+        path: "bin/busybox"
+        size: 919304
+        mode: 493
+        stat: "n:0:0"
+      - type: hardlink
+        path: "bin/sh"
+        target: "bin/busybox"
+        stat: "n:0:0"
+      - type: symlink
+        path: "lib64"
+        target: "lib"
+        stat: "n:0:0"
+  - index: 1
+    command: "RUN apk add --no-cache curl"
+    digest: "sha256:..."
+    entries:
+      - type: file
+        path: "usr/bin/curl"
+        size: 204800
+        mode: 493
+        stat: "n:0:0"
+      - type: file
+        path: "etc/apk/world"
+        size: 32
+        mode: 420
+        stat: "m:0:0"
+```
 
 ## Repository Structure
 
