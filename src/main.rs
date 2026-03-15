@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
-use clap::{Parser, ValueEnum};
-use std::path::PathBuf;
+use clap::{Args, Parser, Subcommand, ValueEnum};
+use std::path::{Path, PathBuf};
 
 use oci2git::{DockerSource, ImageProcessor, NerdctlSource, Notifier, TarSource};
 
@@ -11,9 +11,8 @@ enum Engine {
     Tar,
 }
 
-#[derive(Parser)]
-#[command(author, version, about, long_about = None)]
-struct Cli {
+#[derive(Debug, Args)]
+struct ConvertArgs {
     #[arg(
         help = "Image name to convert (e.g., ubuntu:latest) or path to tarball when using tar engine"
     )]
@@ -40,63 +39,182 @@ struct Cli {
         short,
         long,
         action = clap::ArgAction::Count,
-        help = "Verbose mode (-v for info, -vv for debug, -vvv for trace). Also switches to text-based progress"
+        help = "Verbose mode (-v for info, -vv for debug, -vvv for trace)"
     )]
     verbose: u8,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Convert an OCI/Docker image to a Git repository
+    Convert(ConvertArgs),
+
+    /// Generate a YAML filesystem bill of materials
+    Fsbom {
+        #[arg(help = "Image name (e.g., ubuntu:latest) or path to tarball when using tar engine")]
+        image: String,
+
+        #[arg(
+            short,
+            long,
+            default_value = "./fsbom.yml",
+            help = "Output path for the YAML BOM file"
+        )]
+        output: PathBuf,
+
+        #[arg(
+            short,
+            long,
+            value_enum,
+            default_value = "docker",
+            help = "Container engine to use (docker, nerdctl, tar)"
+        )]
+        engine: Engine,
+
+        #[arg(
+            short,
+            long,
+            action = clap::ArgAction::Count,
+            help = "Verbose mode (-v for info, -vv for debug, -vvv for trace)"
+        )]
+        verbose: u8,
+    },
+}
+
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+#[command(args_conflicts_with_subcommands = true)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+
+    #[arg(
+        help = "Image name to convert (e.g., ubuntu:latest) or path to tarball when using tar engine"
+    )]
+    image: Option<String>,
+
+    #[arg(
+        short,
+        long,
+        default_value = "./container_repo",
+        help = "Output directory for Git repository"
+    )]
+    output: PathBuf,
+
+    #[arg(
+        short,
+        long,
+        value_enum,
+        default_value = "docker",
+        help = "Container engine to use (docker, nerdctl, tar)"
+    )]
+    engine: Engine,
+
+    #[arg(
+        short,
+        long,
+        action = clap::ArgAction::Count,
+        help = "Verbose mode (-v for info, -vv for debug, -vvv for trace)"
+    )]
+    verbose: u8,
+}
+
+fn run_convert(image: &str, output: &Path, engine: Engine, verbose: u8) -> Result<()> {
+    let notifier = Notifier::new(verbose);
+    notifier.debug(&format!("Output directory: {}", output.display()));
+    notifier.debug(&format!("Engine: {engine:?}"));
+
+    match engine {
+        Engine::Docker => {
+            notifier.info(&format!(
+                "Starting oci2git with Docker engine, image: {image}"
+            ));
+            let source = DockerSource::new()
+                .map_err(|e| anyhow!("Failed to initialize Docker source: {e}"))?;
+            ImageProcessor::new(source, notifier).convert(image, output)?;
+        }
+        Engine::Nerdctl => {
+            notifier.info(&format!(
+                "Starting oci2git with nerdctl engine, image: {image}"
+            ));
+            let source = NerdctlSource::new()
+                .map_err(|e| anyhow!("Failed to initialize nerdctl source: {e}"))?;
+            ImageProcessor::new(source, notifier).convert(image, output)?;
+        }
+        Engine::Tar => {
+            notifier.info(&format!(
+                "Starting oci2git with tar engine, tarball: {image}"
+            ));
+            let source =
+                TarSource::new().map_err(|e| anyhow!("Failed to initialize tar source: {e}"))?;
+            ImageProcessor::new(source, notifier).convert(image, output)?;
+        }
+    }
+    Ok(())
+}
+
+fn run_fsbom(image: &str, output: &Path, engine: Engine, verbose: u8) -> Result<()> {
+    let notifier = Notifier::new(verbose);
+    notifier.debug(&format!("Output path: {}", output.display()));
+    notifier.debug(&format!("Engine: {engine:?}"));
+
+    match engine {
+        Engine::Docker => {
+            notifier.info(&format!(
+                "Generating fsbom with Docker engine, image: {image}"
+            ));
+            let source = DockerSource::new()
+                .map_err(|e| anyhow!("Failed to initialize Docker source: {e}"))?;
+            ImageProcessor::new(source, notifier).generate_fsbom(image, output)?;
+        }
+        Engine::Nerdctl => {
+            notifier.info(&format!(
+                "Generating fsbom with nerdctl engine, image: {image}"
+            ));
+            let source = NerdctlSource::new()
+                .map_err(|e| anyhow!("Failed to initialize nerdctl source: {e}"))?;
+            ImageProcessor::new(source, notifier).generate_fsbom(image, output)?;
+        }
+        Engine::Tar => {
+            notifier.info(&format!(
+                "Generating fsbom with tar engine, tarball: {image}"
+            ));
+            let source =
+                TarSource::new().map_err(|e| anyhow!("Failed to initialize tar source: {e}"))?;
+            ImageProcessor::new(source, notifier).generate_fsbom(image, output)?;
+        }
+    }
+    Ok(())
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // Create notifier with verbosity level
-    let notifier = Notifier::new(cli.verbose);
+    let cmd = cli.command.unwrap_or_else(|| {
+        Commands::Convert(ConvertArgs {
+            image: cli.image.unwrap_or_default(),
+            output: cli.output,
+            engine: cli.engine,
+            verbose: cli.verbose,
+        })
+    });
 
-    notifier.debug(&format!("Output directory: {}", cli.output.display()));
-    notifier.debug(&format!("Engine: {:?}", cli.engine));
-    notifier.debug(&format!(
-        "Beautiful progress: {}",
-        notifier.use_beautiful_progress()
-    ));
-
-    match cli.engine {
-        Engine::Docker => {
-            notifier.info(&format!(
-                "Starting oci2git with Docker engine, image: {}",
-                cli.image
-            ));
-            notifier.debug("Initializing Docker source");
-
-            let source = DockerSource::new()
-                .map_err(|e| anyhow!("Failed to initialize Docker source: {e}"))?;
-
-            let processor = ImageProcessor::new(source, notifier);
-            processor.convert(&cli.image, &cli.output)?;
+    match cmd {
+        Commands::Convert(args) => {
+            if args.image.is_empty() {
+                return Err(anyhow!(
+                    "Image name required.\nUsage: oci2git convert <IMAGE>"
+                ));
+            }
+            run_convert(&args.image, &args.output, args.engine, args.verbose)?;
         }
-        Engine::Nerdctl => {
-            notifier.info(&format!(
-                "Starting oci2git with nerdctl engine, image: {}",
-                cli.image
-            ));
-            notifier.debug("Initializing nerdctl source");
-
-            let source = NerdctlSource::new()
-                .map_err(|e| anyhow!("Failed to initialize nerdctl source: {e}"))?;
-
-            let processor = ImageProcessor::new(source, notifier);
-            processor.convert(&cli.image, &cli.output)?;
-        }
-        Engine::Tar => {
-            notifier.info(&format!(
-                "Starting oci2git with tar engine, tarball: {}",
-                cli.image
-            ));
-            notifier.debug("Initializing tar source");
-
-            let source =
-                TarSource::new().map_err(|e| anyhow!("Failed to initialize tar source: {e}"))?;
-
-            let processor = ImageProcessor::new(source, notifier);
-            processor.convert(&cli.image, &cli.output)?;
+        Commands::Fsbom {
+            image,
+            output,
+            engine,
+            verbose,
+        } => {
+            run_fsbom(&image, &output, engine, verbose)?;
         }
     }
 

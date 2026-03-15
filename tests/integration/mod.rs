@@ -5,5 +5,6 @@
 
 pub mod common;
 pub mod docker;
+pub mod fsbom;
 pub mod nerdctl;
 pub mod tar;
